@@ -104,11 +104,22 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
     )
 
     async with session_factory() as session:
-        # Begin a savepoint (nested transaction) so we can roll back just this test's changes
-        async with session.begin():
+        # Begin a transaction manually so we can ALWAYS roll it back in `finally`.
+        #
+        # WHY NOT `async with session.begin()`?
+        #   That context manager commits the transaction when the `with` block exits
+        #   cleanly (i.e. when the test passes without raising). That means every
+        #   passing test permanently writes to the DB, and the next test sees those
+        #   rows — breaking isolation.
+        #
+        # WHY `try/finally`?
+        #   `finally` runs whether the test passes or fails, so `rollback()` is
+        #   guaranteed. No data from one test can ever leak into the next.
+        await session.begin()
+        try:
             yield session
-            # Rollback happens automatically at the end of `async with session.begin()`
-            # when we exit without committing — leaving the DB clean
+        finally:
+            await session.rollback()
 
 
 # ── FastAPI Test Client ────────────────────────────────────────────────────────

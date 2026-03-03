@@ -14,10 +14,11 @@ HOW IT WORKS:
   4. You get a fully type-safe `settings` object to import anywhere
 """
 
+import json
 from functools import lru_cache
 from typing import List
 
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -76,6 +77,41 @@ class Settings(BaseSettings):
     max_retry_attempts: int = 3
     retry_base_delay: float = 1.0
     scraper_interval_seconds: int = 3600
+    scraper_request_timeout: int = 30  # seconds before an HTTP request gives up
+
+    # ── Scraper — Company Slugs ───────────────────────────────────────────────
+    # Which companies to scrape, stored as JSON dicts: {"slug": "Human Name"}.
+    # The slug is used in the API URL; the name is stored in the DB.
+    #
+    # How to find a company's slug:
+    #   Greenhouse: go to their jobs page, e.g. https://boards.greenhouse.io/airbnb
+    #               The slug is "airbnb"
+    #   Lever:      go to https://jobs.lever.co/notion
+    #               The slug is "notion"
+    #
+    # In .env, set as a JSON string (use single quotes around the whole thing):
+    #   GREENHOUSE_SLUGS={"airbnb": "Airbnb", "figma": "Figma", "ramp": "Ramp"}
+    greenhouse_slugs: dict = {
+        "airbnb": "Airbnb",
+        "figma": "Figma",
+        "ramp": "Ramp",
+        "coinbase": "Coinbase",
+        "plaid": "Plaid",
+    }
+    lever_slugs: dict = {
+        "notion": "Notion",
+    }
+
+    @field_validator("greenhouse_slugs", "lever_slugs", mode="before")
+    @classmethod
+    def parse_slug_dict(cls, value: str | dict) -> dict:
+        """
+        Allow slug dicts to be set as JSON strings in .env.
+        If the value is already a dict (e.g. from code), pass through unchanged.
+        """
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
 
     # ── Logging ───────────────────────────────────────────────────────────────
     log_level: str = "INFO"
