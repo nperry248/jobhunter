@@ -38,3 +38,5 @@ frontend/.vite/
 .idea/
 .vscode/
 *.swp
+data/resumes/
+data/

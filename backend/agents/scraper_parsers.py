@@ -103,6 +103,12 @@ class ScraperFilters:
     # Hard cap on total jobs written per run (prevents runaway scraping).
     max_jobs: int = 100
 
+    # Per-company cap on SWE-filtered jobs kept per run.
+    # WHY: without this, the first company in the list fills the entire max_jobs
+    # quota before any other company gets scraped. A per-company cap guarantees
+    # diversity across the target company list.
+    max_jobs_per_company: int = 5
+
 
 # ── Greenhouse Parser ─────────────────────────────────────────────────────────
 def parse_greenhouse_response(data: dict, company_name: str) -> list[ParsedJob]:

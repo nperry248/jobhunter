@@ -162,10 +162,8 @@ REDIS_URL=redis://localhost:6379/0
 ## Git Branch Strategy
 
 ```
-main          ← stable, always works
-dev           ← integration branch
-feat/...      ← feature branches (branch off dev)
-fix/...       ← bug fixes
+main   ← stable, always works — merge from dev when a phase is complete
+dev    ← active development branch — all day-to-day work happens here
 ```
 
 Never commit directly to `main`. PR from `dev` → `main` when a phase is complete.

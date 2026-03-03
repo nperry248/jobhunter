@@ -7,9 +7,6 @@
  *   - One place to update the base URL when moving to production
  *   - One place to add auth headers, error handling, retry logic
  *   - Components stay clean: they call `api.getJobs()`, not raw fetch()
- *
- * This is a stub — real API functions will be added in Session 2 when
- * the Jobs endpoint is implemented.
  */
 
 // Base URL of the FastAPI backend.
@@ -38,13 +35,43 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-// ── API functions (add more as routes are implemented) ────────────────────────
+// ── API functions ─────────────────────────────────────────────────────────────
 
 /** Check if the backend API is running. */
 export async function checkHealth() {
   return request("/health");
 }
 
-// TODO (Session 2): Add getJobs(), updateJobStatus(), etc.
-// TODO (Session 2): Add getUserProfile(), updateUserProfile()
-// TODO (Session 3): Add getApplications(), triggerApply()
+/**
+ * Fetch a paginated, filtered list of jobs.
+ *
+ * @param {object} params
+ * @param {string|null} params.status  - Filter by status ("new", "scored", etc.) or null for all
+ * @param {number}      params.limit   - Max results per page (default 20)
+ * @param {number}      params.offset  - How many results to skip (for pagination)
+ *
+ * @returns {{ jobs: Job[], total: number, limit: number, offset: number }}
+ */
+export async function getJobs({ status = null, limit = 20, offset = 0 } = {}) {
+  // Build the query string from whichever params are set.
+  // URLSearchParams handles encoding special characters automatically.
+  const params = new URLSearchParams({ limit, offset });
+  if (status) params.set("status", status);
+
+  return request(`/api/v1/jobs?${params}`);
+}
+
+/**
+ * Update a job's status to "reviewed" or "ignored".
+ *
+ * @param {string} jobId   - UUID of the job to update
+ * @param {string} status  - "reviewed" or "ignored"
+ *
+ * @returns {Job} The updated job object
+ */
+export async function updateJobStatus(jobId, status) {
+  return request(`/api/v1/jobs/${jobId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
