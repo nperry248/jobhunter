@@ -61,18 +61,23 @@ class MatchConfig:
     model: str = "claude-haiku-4-5-20251001"
     max_tokens: int = 200
 
-    # Token budget: 4000 chars ≈ ~1000 tokens at ~4 chars/token (rough estimate).
-    # Haiku's context window is 200k tokens, so this is very conservative.
-    # Adjust if you find Claude missing important resume details.
-    resume_max_chars: int = 4000
-    description_max_chars: int = 2000
+    # Token budget: 6000 chars ≈ ~1500 tokens at ~4 chars/token.
+    # Many job descriptions front-load boilerplate and put requirements at the end —
+    # bumping to 4000 chars ensures Claude sees the actual requirements section.
+    resume_max_chars: int = 6000
+    description_max_chars: int = 4000
 
     # The rubric Claude uses to justify its score. Ordered by importance.
+    # WHY these criteria in this order:
+    #   Technical skill overlap is the only thing that actually matters for
+    #   deciding whether to apply. Years of experience and seniority labels
+    #   ("5+ years required") are soft signals that early-career candidates
+    #   should not self-select out of — companies post those as wish lists.
     scoring_criteria: list[str] = field(default_factory=lambda: [
-        "Technical skill overlap between resume and job requirements",
-        "Seniority level match (internship vs new grad vs mid-level)",
-        "Industry/domain relevance (fintech, consumer, B2B, etc.)",
-        "Education requirements (degree level, major, GPA if listed)",
+        "Technical skill overlap — programming languages, frameworks, tools, and domains",
+        "Project and experience relevance — does past work align with what this role builds?",
+        "Education fit — CS/engineering degree, relevant coursework, strong GPA",
+        "Domain alignment — e.g. fintech candidate for fintech role, ML candidate for ML role",
         "Location/remote compatibility",
     ])
 
@@ -129,25 +134,34 @@ def build_scoring_prompt(
         for i, criterion in enumerate(config.scoring_criteria)
     )
 
-    return f"""You are an expert technical recruiter evaluating candidate–job fit.
+    return f"""You are a tool that helps early-career software engineers decide which jobs to apply to.
 
-Score how well this candidate's resume matches the job posting below.
+Your job is to score how well a candidate's skills and background match a job posting.
+You are scoring "is it worth applying?" — NOT "will they get hired?"
 
-SCORING RUBRIC (consider these factors in order of importance):
+IMPORTANT CALIBRATION RULES:
+- Years-of-experience requirements ("3+ years", "5+ years") are wish lists. Ignore them when
+  scoring — a strong skill match outweighs missing years every time for early-career candidates.
+- If the candidate has 60%+ of the listed technical skills, the score should be 65 or above.
+- If the candidate has 80%+ of the listed technical skills, the score should be 80 or above.
+- Score generously: it costs nothing to apply to a reach job, so err on the side of encouraging.
+- A Computer Science degree + relevant internship/project experience is a strong baseline.
+
+SCORING RUBRIC (weight in this order):
 {criteria_lines}
 
 OUTPUT FORMAT — respond with ONLY valid JSON, no other text:
 {{
   "score": <integer 0-100>,
-  "reasoning": "<one sentence explaining the primary driver of the score>"
+  "reasoning": "<one sentence: the single biggest factor driving this score>"
 }}
 
-Score meanings:
-  90-100: Exceptional match — apply immediately
-  70-89:  Strong match — worth applying
-  50-69:  Partial match — apply if job search is slow
-  30-49:  Weak match — significant gaps
-  0-29:   Poor match — missing critical requirements
+Score guide:
+  85-100: Excellent match — strong skill overlap, clearly relevant background
+  70-84:  Good match — most skills present, worth applying confidently
+  55-69:  Decent match — some skill gaps but enough overlap to apply
+  40-54:  Weak match — missing several core requirements
+  0-39:   Poor match — fundamentally different domain or skill set
 
 ---
 

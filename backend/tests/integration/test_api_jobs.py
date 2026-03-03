@@ -362,12 +362,30 @@ class TestUpdateJobStatusEndpoint:
         )
         assert response.status_code == 404
 
+    async def test_undo_review_returns_job_to_scored(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """
+        Setting status back to 'scored' (undo reviewed) should return 200 with status='scored'.
+        This lets users un-review a job from the dashboard.
+        """
+        job = make_job(status=JobStatus.REVIEWED)
+        db_session.add(job)
+        await db_session.flush()
+
+        response = await client.patch(
+            f"/api/v1/jobs/{job.id}",
+            json={"status": "scored"},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "scored"
+
     async def test_invalid_status_returns_422(
         self, client: AsyncClient, db_session: AsyncSession
     ) -> None:
         """
         Attempting to set status to 'applied' (agent-only transition) should return 422.
-        The Literal["reviewed", "ignored"] type on PatchJobRequest enforces this.
+        The Literal["reviewed", "ignored", "scored"] type on PatchJobRequest enforces this.
         """
         job = make_job()
         db_session.add(job)

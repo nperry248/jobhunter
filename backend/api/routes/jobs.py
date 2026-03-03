@@ -95,14 +95,12 @@ class PatchJobRequest(BaseModel):
     """
     Request body for PATCH /jobs/{id}.
 
-    WHY ONLY "reviewed" AND "ignored":
-      The dashboard is the user's view of the world — they can mark things
-      as seen (reviewed) or dismiss them (ignored). All other transitions
-      (new→scored, scored→applied, etc.) are automated by agents.
-      Restricting the PATCH to these two prevents the frontend from putting
-      jobs into invalid states.
+    Allowed transitions from the dashboard:
+      scored   → reviewed  (user marks a job as reviewed)
+      scored   → ignored   (user dismisses a job)
+      reviewed → scored    (user undoes a review — goes back to scored)
     """
-    status: Literal["reviewed", "ignored"]
+    status: Literal["reviewed", "ignored", "scored"]
 
 
 # ── GET /api/v1/jobs ──────────────────────────────────────────────────────────

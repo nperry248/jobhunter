@@ -86,7 +86,13 @@ class Settings(BaseSettings):
         return value
 
     # ── Agent Behavior ────────────────────────────────────────────────────────
-    scraper_max_jobs_per_run: int = 100
+    scraper_max_jobs_per_run: int = 50
+    # How many SWE-filtered jobs to keep per company per run.
+    # WHY: without a per-company cap, the first company (e.g. Stripe) can fill
+    # the entire scraper_max_jobs_per_run quota before other companies even run.
+    # A cap of 5 means ~5 relevant jobs per company × 31 companies = up to 155
+    # candidates, then we pick the best 50 after filtering.
+    scraper_max_jobs_per_company: int = 5
     match_score_threshold: int = 70
     max_retry_attempts: int = 3
     retry_base_delay: float = 1.0
@@ -100,27 +106,114 @@ class Settings(BaseSettings):
     # Set to 0.0 in tests (via override) so tests don't sleep.
     claude_request_delay_seconds: float = 0.5
 
+    # ── Scraper — SWE Title Keywords ──────────────────────────────────────────
+    # Job titles must contain at least one of these keywords (case-insensitive)
+    # to be saved to the DB. This is the primary filter that eliminates
+    # marketing, HR, finance, and operations roles before they waste tokens.
+    #
+    # WHY TITLE-BASED (not description-based):
+    #   Title filtering is O(1) and runs before any DB write or API call.
+    #   It eliminates ~70% of irrelevant postings at near-zero cost.
+    #
+    # WHY NO STANDALONE "engineer" or "developer":
+    #   Too broad — matches "Revenue Operations Engineer", "Sales Engineer",
+    #   "Field Engineer", "Solutions Engineer", etc. Use specific phrases instead.
+    #
+    # Override in .env as a JSON array:
+    #   SWE_TITLE_KEYWORDS=["software engineer", "backend engineer", "ml engineer"]
+    swe_title_keywords: list = [
+        # ── Explicit SWE phrases ──────────────────────────────────────────────
+        "software engineer",
+        "software developer",
+        "software development",
+        "backend engineer",
+        "frontend engineer",
+        "full stack engineer",
+        "fullstack engineer",
+        "full-stack engineer",
+        "platform engineer",
+        "infrastructure engineer",
+        "site reliability engineer",
+        # ── Data / ML ─────────────────────────────────────────────────────────
+        "data engineer",
+        "data scientist",
+        "machine learning engineer",
+        "ml engineer",
+        "ai engineer",
+        "research engineer",
+        "applied scientist",
+        # ── Mobile ────────────────────────────────────────────────────────────
+        "mobile engineer",
+        "ios engineer",
+        "android engineer",
+        # ── Ops / Security ────────────────────────────────────────────────────
+        "devops engineer",
+        "security engineer",
+        # ── Abbreviations used in job titles ──────────────────────────────────
+        "sre",
+        "sde",
+        "swe",
+    ]
+
+    @field_validator("swe_title_keywords", mode="before")
+    @classmethod
+    def parse_keywords_list(cls, value: str | list) -> list:
+        """Allow SWE_TITLE_KEYWORDS to be set as a JSON array string in .env."""
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
+
     # ── Scraper — Company Slugs ───────────────────────────────────────────────
     # Which companies to scrape, stored as JSON dicts: {"slug": "Human Name"}.
     # The slug is used in the API URL; the name is stored in the DB.
     #
-    # How to find a company's slug:
-    #   Greenhouse: go to their jobs page, e.g. https://boards.greenhouse.io/airbnb
-    #               The slug is "airbnb"
-    #   Lever:      go to https://jobs.lever.co/notion
-    #               The slug is "notion"
+    # How to find/verify a slug:
+    #   Greenhouse: https://boards.greenhouse.io/{slug}  → should show a jobs page
+    #   Lever:      https://jobs.lever.co/{slug}         → should show a jobs page
     #
-    # In .env, set as a JSON string (use single quotes around the whole thing):
-    #   GREENHOUSE_SLUGS={"airbnb": "Airbnb", "figma": "Figma", "ramp": "Ramp"}
+    # Override in .env as a JSON string:
+    #   GREENHOUSE_SLUGS={"stripe": "Stripe", "airbnb": "Airbnb"}
     greenhouse_slugs: dict = {
-        "airbnb": "Airbnb",
-        "figma": "Figma",
-        "ramp": "Ramp",
+        # ── Fintech / Payments ────────────────────────────────────────────────
+        "stripe": "Stripe",
         "coinbase": "Coinbase",
         "plaid": "Plaid",
+        "ramp": "Ramp",
+        "brex": "Brex",
+        "chime": "Chime",
+        "robinhood": "Robinhood",
+        # ── Consumer / Marketplace ────────────────────────────────────────────
+        "airbnb": "Airbnb",
+        "doordash": "DoorDash",
+        "lyft": "Lyft",
+        "instacart": "Instacart",
+        "duolingo": "Duolingo",
+        # ── Developer Tools / Infrastructure ──────────────────────────────────
+        "figma": "Figma",
+        "databricks": "Databricks",
+        "snowflakecomputing": "Snowflake",
+        "dropbox": "Dropbox",
+        "squarespace": "Squarespace",
+        "intercom": "Intercom",
+        # ── Enterprise SaaS ───────────────────────────────────────────────────
+        "asana": "Asana",
+        "rippling": "Rippling",
+        "gusto": "Gusto",
+        "lattice": "Lattice",
+        # ── Social / Communication ────────────────────────────────────────────
+        "discord": "Discord",
+        "reddit": "Reddit",
     }
     lever_slugs: dict = {
+        # ── Developer Tools / AI ──────────────────────────────────────────────
         "notion": "Notion",
+        "scale": "Scale AI",
+        "perplexity": "Perplexity",
+        # ── Consumer / Enterprise ─────────────────────────────────────────────
+        "tesla": "Tesla",
+        "shopify": "Shopify",
+        "pinterest": "Pinterest",
+        "canva": "Canva",
     }
 
     @field_validator("greenhouse_slugs", "lever_slugs", mode="before")

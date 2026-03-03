@@ -298,12 +298,20 @@ async def run(
     Returns:
         ScraperResult with counts of fetched, filtered, new, and duplicate jobs.
     """
-    # Build default filters from settings if none provided
+    # Build default filters from settings if none provided.
+    # WHY keywords=swe_title_keywords:
+    #   Without this, the scraper saves every job at every company — marketing
+    #   managers, HR directors, finance analysts, etc. — wasting DB space and
+    #   burning Claude tokens scoring completely irrelevant roles.
+    #   Title-keyword filtering is the cheapest possible gate: pure string match,
+    #   runs before any DB write, eliminates ~70% of irrelevant postings.
     if filters is None:
         filters = ScraperFilters(
             greenhouse_slugs=settings.greenhouse_slugs,
             lever_slugs=settings.lever_slugs,
             max_jobs=settings.scraper_max_jobs_per_run,
+            max_jobs_per_company=settings.scraper_max_jobs_per_company,
+            keywords=settings.swe_title_keywords,
         )
 
     result = ScraperResult()
@@ -320,11 +328,18 @@ async def run(
         },
     )
 
-    # ── Fetch all jobs from all companies ─────────────────────────────────────
+    # ── Fetch and filter jobs per company ────────────────────────────────────
     # We use a single httpx.AsyncClient for the entire run.
     # WHY: AsyncClient maintains a connection pool internally. Reusing it means
     # we don't open/close a TCP connection for every single API call.
+    #
+    # IMPORTANT — why we filter INLINE (per company) rather than after all fetching:
+    #   If we fetch all companies first and filter at the end, the first company
+    #   (e.g. Stripe, which has hundreds of postings) fills the max_jobs quota
+    #   before any other company gets a chance. By filtering and capping per-company
+    #   as we go, we guarantee diversity across the target company list.
     all_parsed: list[ParsedJob] = []
+    total_raw_fetched: int = 0  # counts all jobs pulled from APIs, before filtering
 
     async with httpx.AsyncClient(
         timeout=settings.scraper_request_timeout,
@@ -333,25 +348,30 @@ async def run(
     ) as client:
         # Fetch Greenhouse companies
         for slug, company_name in filters.greenhouse_slugs.items():
-            jobs = await fetch_greenhouse_jobs(slug, company_name, client)
-            all_parsed.extend(jobs)
             if len(all_parsed) >= filters.max_jobs:
                 break
+            raw_jobs = await fetch_greenhouse_jobs(slug, company_name, client)
+            total_raw_fetched += len(raw_jobs)
+            # Apply keyword/type/location filters and enforce per-company cap.
+            company_passing = [j for j in raw_jobs if passes_filters(j, filters)]
+            company_passing = company_passing[: filters.max_jobs_per_company]
+            all_parsed.extend(company_passing)
 
-        # Fetch Lever companies (if we haven't hit the cap)
-        if len(all_parsed) < filters.max_jobs:
-            for slug, company_name in filters.lever_slugs.items():
-                jobs = await fetch_lever_jobs(slug, company_name, client)
-                all_parsed.extend(jobs)
-                if len(all_parsed) >= filters.max_jobs:
-                    break
+        # Fetch Lever companies (if we haven't hit the overall cap)
+        for slug, company_name in filters.lever_slugs.items():
+            if len(all_parsed) >= filters.max_jobs:
+                break
+            raw_jobs = await fetch_lever_jobs(slug, company_name, client)
+            total_raw_fetched += len(raw_jobs)
+            company_passing = [j for j in raw_jobs if passes_filters(j, filters)]
+            company_passing = company_passing[: filters.max_jobs_per_company]
+            all_parsed.extend(company_passing)
 
-    result.total_fetched = len(all_parsed)
+    result.total_fetched = total_raw_fetched
 
-    # ── Apply filters ─────────────────────────────────────────────────────────
-    passing_jobs = [job for job in all_parsed if passes_filters(job, filters)]
-    # Enforce the max_jobs cap after filtering
-    passing_jobs = passing_jobs[: filters.max_jobs]
+    # ── Enforce global max_jobs cap ───────────────────────────────────────────
+    # all_parsed already only contains SWE-filtered jobs; just enforce the total cap.
+    passing_jobs = all_parsed[: filters.max_jobs]
     result.total_passed_filter = len(passing_jobs)
 
     logger.info(
@@ -471,11 +491,15 @@ if __name__ == "__main__":
 
     filters = ScraperFilters(
         job_type=args.job_type,
-        keywords=args.keywords,
+        # If no --keywords flag supplied, fall back to the configured SWE keywords.
+        # An empty list means "no keyword filter" (all titles pass), which is not
+        # what we want for a default CLI run — we always want SWE-only titles.
+        keywords=args.keywords or settings.swe_title_keywords,
         locations=args.locations,
         greenhouse_slugs=settings.greenhouse_slugs,
         lever_slugs=settings.lever_slugs,
         max_jobs=settings.scraper_max_jobs_per_run,
+        max_jobs_per_company=settings.scraper_max_jobs_per_company,
     )
 
     result = asyncio.run(run(filters=filters, dry_run=args.dry_run))
