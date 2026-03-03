@@ -17,7 +17,7 @@ Built for the modern SWE job hunt, where applying to 100+ roles is the norm and 
 
 ## Dashboard
 
-![Dashboard showing scored job listings across companies like Stripe, Airbnb, Coinbase](https://placeholder-for-screenshot.png)
+![Dashboard showing scored job listings across companies like Stripe, Airbnb, Coinbase](assets/earlyDashboard.png)
 
 > Jobs ordered by match score. Color-coded badges: green (85+), blue (70+), yellow (55+), orange (40+), red (<40). Claude's one-sentence reasoning shown under each title.
 
