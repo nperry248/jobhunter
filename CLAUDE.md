@@ -13,9 +13,12 @@ JobHunter AI is a multi-agent Python system that autonomously scrapes, filters, 
 
 ## Current Phase
 
-**Phase 1 — Foundation + Scraper Agent**
+**Phase 3 — Apply Agent + Orchestrator** ← UP NEXT
 
-What's done:
+---
+
+### Phase 1 — Foundation + Scraper Agent ✅ COMPLETE
+
   - Full folder structure (backend/ + frontend/)
   - docker-compose.yml (PostgreSQL + Redis, healthy)
   - .env.example with all config vars documented
@@ -24,12 +27,41 @@ What's done:
   - backend/models/ — Job, Application, UserProfile (UUIDs, indexes, soft deletes, timestamps)
   - Alembic migrations initialized + initial migration applied to local DB
   - backend/api/main.py — FastAPI app, CORS, /health endpoint
-  - backend/requirements.txt — all deps pinned
+  - backend/requirements.txt — all deps pinned (including pdfminer.six for Phase 2)
   - backend/tests/ — conftest.py, 18 passing tests (95% coverage)
   - frontend/ — Vite + React + Tailwind, sidebar layout with Jobs/Applications/Settings pages
+  - backend/agents/scraper.py — Greenhouse + Lever scraper, upsert deduplication, retry logic
+  - backend/agents/scraper_parsers.py — ParsedJob, ScraperFilters, parse_greenhouse_response, parse_lever_response, passes_filters
+  - backend/core/logging_config.py — JSON structured logging via get_logger()
+  - Current branch: `feat/scraper-agent`
 
-What's in progress: [ nothing — scaffold complete ]
-What's next: Scraper Agent → LinkedIn/Indeed job pulling (Session 2)
+---
+
+### Phase 2 — Resume Match Agent + Jobs API ✅ COMPLETE
+
+**What to build next (implement in this order):**
+
+  1. `backend/core/config.py` — add `claude_request_delay_seconds: float = 0.5`
+  2. `.env.example` — document the new config var
+  3. `backend/services/resume_parser.py` — `parse_pdf()` (pdfminer.six) + `strip_html()` (regex)
+  4. `backend/agents/resume_match_logic.py` — NEW file: pure functions only (`MatchConfig`, `build_scoring_prompt`, `parse_claude_response`, `clamp_score`)
+  5. `backend/agents/resume_match.py` — main agent: `run()`, `load_resume_text()`, `fetch_new_jobs()`, `score_job()` via `asyncio.to_thread`, `update_job_score()`
+  6. `backend/api/routes/jobs.py` — `GET /api/v1/jobs` (paginated, filterable) + `PATCH /api/v1/jobs/{id}`
+  7. `backend/api/main.py` — uncomment jobs router
+  8. `backend/tests/unit/test_resume_match.py` — ~25 unit tests (TestBuildScoringPrompt, TestParseClaudeResponse, TestClampScore)
+  9. `backend/tests/unit/test_resume_parser.py` — ~6 unit tests (TestStripHtml)
+  10. `backend/tests/integration/test_resume_match_pipeline.py` — ~14 integration tests (mock anthropic.Anthropic)
+  11. `backend/tests/integration/test_api_jobs.py` — ~27 API integration tests (TestListJobsEndpoint, TestUpdateJobStatusEndpoint)
+
+**Key design decisions already made:**
+  - Resume Match uses `claude-haiku-4-5-20251001` (cheap + fast; ~25x cheaper than Sonnet)
+  - `score_job()` is synchronous, called via `asyncio.to_thread()` — anthropic SDK v0.30.0 is sync-only
+  - `parse_claude_response()` has two fallback strategies: direct JSON parse → regex extract → (0.0, error msg)
+  - `GET /jobs` returns `{jobs, total, limit, offset}` envelope, ordered by `match_score DESC NULLS LAST`
+  - `PATCH /jobs/{id}` only allows `"reviewed"` or `"ignored"` — no other status transitions from the dashboard
+  - Anthropic mock pattern for tests: `mocker.patch("anthropic.Anthropic", return_value=mock_client)`
+
+**No DB migration needed** — `match_score`, `match_reasoning`, and all `JobStatus` variants already exist.
 
 ---
 
@@ -57,8 +89,9 @@ cd backend
 pip install -r requirements.txt
 uvicorn api.main:app --reload --port 8000
 
-# Run a specific agent manually
+# Run agents manually
 python -m agents.scraper --dry-run
+python -m agents.resume_match --resume /path/to/resume.pdf --dry-run
 
 # Database migrations
 alembic upgrade head
@@ -120,9 +153,9 @@ REDIS_URL=redis://localhost:6379/0
 
 ## Current Blockers / Decisions Needed
 
-- [ ] Confirm: start scraping LinkedIn first or Indeed first?
-- [ ] Confirm: use LangChain or CrewAI for agent orchestration?
-- [ ] Confirm: user profile stored as JSON file or in DB?
+- [x] Confirm: scraper source → **Greenhouse + Lever** (public APIs, no auth needed)
+- [x] Confirm: user profile stored → **PostgreSQL** (accessible to all Celery workers)
+- [ ] Confirm: use LangChain or CrewAI for agent orchestration? (Phase 3 decision)
 
 ---
 

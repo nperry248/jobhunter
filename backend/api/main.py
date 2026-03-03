@@ -31,8 +31,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 from core.database import engine
 
+from api.routes import jobs
 # TODO: Uncomment as routes are implemented in later steps:
-# from api.routes import jobs, applications, config
+# from api.routes import applications, config
 
 # ── Structured Logging Setup ──────────────────────────────────────────────────
 # We configure logging once at app startup so all modules share the same format.
@@ -116,8 +117,8 @@ app.add_middleware(
 #   we use FastAPI's APIRouter to define routes in separate files and "include" them here.
 #   The `prefix` means every route in jobs.py is automatically under /api/v1/jobs.
 #
-# TODO: Uncomment these as route files are implemented:
-# app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["jobs"])
+app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["jobs"])
+# TODO: Uncomment as route files are implemented:
 # app.include_router(applications.router, prefix="/api/v1/applications", tags=["applications"])
 # app.include_router(config.router, prefix="/api/v1/config", tags=["config"])
 

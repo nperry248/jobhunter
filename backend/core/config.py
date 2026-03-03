@@ -16,10 +16,18 @@ HOW IT WORKS:
 
 import json
 from functools import lru_cache
-from typing import List
+from pathlib import Path
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Resolve the .env file path relative to THIS file, not the working directory.
+# config.py lives at backend/core/config.py, so .parent.parent is backend/,
+# and one more .parent is the project root where .env lives.
+# WHY: if you run `uvicorn api.main:app` from backend/, the cwd is backend/.
+# A plain `env_file=".env"` would look for backend/.env, which doesn't exist.
+# Using an absolute path means it always finds project_root/.env correctly.
+_ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -33,7 +41,7 @@ class Settings(BaseSettings):
     # model_config tells Pydantic where to find the .env file.
     # `extra="ignore"` means unknown env vars won't cause errors.
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -58,7 +66,13 @@ class Settings(BaseSettings):
     # CORS origins: which frontend URLs are allowed to make API requests.
     # In .env, set as a comma-separated string: "http://localhost:5173,http://localhost:3000"
     # The @field_validator below converts that string into a Python list.
-    backend_cors_origins: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    #
+    # NOTE on pydantic-settings v2: if the type is purely List[str], pydantic-settings
+    # tries to JSON-decode the raw env value before our validator runs, and fails on
+    # comma-separated strings like "http://a,http://b". Declaring it as `list | str`
+    # tells pydantic-settings to pass the raw string through unchanged, letting our
+    # validator handle the conversion.
+    backend_cors_origins: list | str = ["http://localhost:5173", "http://localhost:3000"]
 
     @field_validator("backend_cors_origins", mode="before")
     @classmethod
@@ -78,6 +92,13 @@ class Settings(BaseSettings):
     retry_base_delay: float = 1.0
     scraper_interval_seconds: int = 3600
     scraper_request_timeout: int = 30  # seconds before an HTTP request gives up
+
+    # Seconds to wait between Claude API calls in the Resume Match agent.
+    # WHY: Claude's API has rate limits (requests-per-minute). If we score 100 jobs
+    # with zero delay we'll hit the limiter and get 429 errors. A 0.5s pause keeps
+    # us well under the limit without meaningfully slowing down the agent.
+    # Set to 0.0 in tests (via override) so tests don't sleep.
+    claude_request_delay_seconds: float = 0.5
 
     # ── Scraper — Company Slugs ───────────────────────────────────────────────
     # Which companies to scrape, stored as JSON dicts: {"slug": "Human Name"}.
