@@ -1,0 +1,116 @@
+# ─────────────────────────────────────────────────────────────
+# requirements.txt — All Python dependencies, pinned to exact versions.
+#
+# Install: pip install -r requirements.txt
+# To update a package: change the version here, then re-run pip install.
+# ─────────────────────────────────────────────────────────────
+
+
+# ── Web Framework ─────────────────────────────────────────────
+# FastAPI: async web framework. Handles HTTP routing, request validation,
+#          auto-generates /docs (Swagger UI) from your type hints.
+fastapi==0.111.0
+
+# Uvicorn: the ASGI server that actually runs FastAPI.
+# ASGI (Asynchronous Server Gateway Interface) is the async version of WSGI.
+# `standard` includes extra deps like websockets and httptools for better perf.
+uvicorn[standard]==0.30.1
+
+# python-multipart: required for FastAPI to handle file uploads (resume PDFs).
+python-multipart==0.0.9
+
+
+# ── Database ─────────────────────────────────────────────────
+# SQLAlchemy: ORM (Object-Relational Mapper). Lets you write Python classes
+#             that map to database tables instead of raw SQL strings.
+# Version 2.x is required for modern async support.
+SQLAlchemy==2.0.31
+
+# asyncpg: the async PostgreSQL driver SQLAlchemy uses under the hood.
+# Without this, SQLAlchemy can't talk to PostgreSQL asynchronously.
+asyncpg==0.29.0
+
+# greenlet: required by SQLAlchemy async internals (bridges sync/async execution contexts).
+greenlet==3.0.3
+
+
+# ── Migrations ────────────────────────────────────────────────
+# Alembic: database migration tool built for SQLAlchemy.
+# Tracks schema changes over time so you never have to drop+recreate the DB.
+alembic==1.13.2
+
+
+# ── Config / Settings ─────────────────────────────────────────
+# pydantic-settings: reads .env files into type-safe Python objects.
+# If a required env var is missing, the app crashes at startup with a clear error.
+pydantic-settings==2.3.4
+
+# pydantic v2: data validation library. FastAPI uses it for request/response schemas.
+pydantic==2.8.2
+
+# python-dotenv: loads .env file into os.environ so pydantic-settings can read it.
+python-dotenv==1.0.1
+
+
+# ── Task Queue ────────────────────────────────────────────────
+# Celery: distributed task queue. Runs agents as background jobs.
+# `redis` extra includes the Redis backend adapter.
+celery[redis]==5.4.0
+
+# redis-py: Python client for interacting with Redis directly (not just via Celery).
+redis==5.0.7
+
+
+# ── AI ────────────────────────────────────────────────────────
+# Anthropic Python SDK: official client for the Claude API.
+anthropic==0.30.0
+
+# LangChain: agent orchestration framework. Provides tool use, memory, chains.
+# We use this to build the multi-step agent workflows.
+langchain==0.2.11
+langchain-anthropic==0.1.22
+
+
+# ── Browser Automation ────────────────────────────────────────
+# Playwright: controls a real browser (Chromium) to fill forms and submit apps.
+# After install, run: playwright install chromium
+playwright==1.45.0
+
+
+# ── HTTP Client ───────────────────────────────────────────────
+# httpx: async HTTP client. Used by scrapers to fetch job board pages.
+# Also used by tests to make HTTP requests to the FastAPI app.
+httpx==0.27.0
+
+
+# ── Logging ───────────────────────────────────────────────────
+# python-json-logger: formats Python log output as JSON instead of plain text.
+# JSON logs are machine-readable and play nicely with log aggregation tools.
+python-json-logger==2.0.7
+
+
+# ── Testing ───────────────────────────────────────────────────
+# pytest: the testing framework.
+pytest==8.3.1
+
+# pytest-asyncio: allows `async def test_...` functions.
+# Required because our FastAPI app and agents are all async.
+pytest-asyncio==0.23.8
+
+# pytest-mock: adds a `mocker` fixture for easy mocking/patching.
+pytest-mock==3.14.0
+
+# pytest-cov: measures test coverage (what % of your code is exercised by tests).
+pytest-cov==5.0.0
+
+# factory-boy: generates test fixture objects (fake Job records, etc.)
+# Much cleaner than manually building test data in every test.
+factory-boy==3.3.0
+
+# Faker: generates realistic fake data (names, emails, URLs) for factories.
+Faker==26.0.0
+
+
+# ── PDF Parsing ───────────────────────────────────────────────
+# pdfminer.six: extracts text from PDF files (for resume parsing in Phase 2).
+pdfminer.six==20231228

@@ -15,9 +15,21 @@ JobHunter AI is a multi-agent Python system that autonomously scrapes, filters, 
 
 **Phase 1 — Foundation + Scraper Agent**
 
-What's done: [ nothing yet — first session ]
-What's in progress: [ project scaffold ]
-What's next: Scraper Agent → LinkedIn/Indeed job pulling
+What's done:
+  - Full folder structure (backend/ + frontend/)
+  - docker-compose.yml (PostgreSQL + Redis, healthy)
+  - .env.example with all config vars documented
+  - backend/core/config.py — Pydantic Settings
+  - backend/core/database.py — async SQLAlchemy engine, pool_size=10, max_overflow=20
+  - backend/models/ — Job, Application, UserProfile (UUIDs, indexes, soft deletes, timestamps)
+  - Alembic migrations initialized + initial migration applied to local DB
+  - backend/api/main.py — FastAPI app, CORS, /health endpoint
+  - backend/requirements.txt — all deps pinned
+  - backend/tests/ — conftest.py, 18 passing tests (95% coverage)
+  - frontend/ — Vite + React + Tailwind, sidebar layout with Jobs/Applications/Settings pages
+
+What's in progress: [ nothing — scaffold complete ]
+What's next: Scraper Agent → LinkedIn/Indeed job pulling (Session 2)
 
 ---
 

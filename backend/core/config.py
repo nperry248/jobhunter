@@ -1,0 +1,97 @@
+"""
+core/config.py — Centralized configuration via Pydantic Settings.
+
+WHY THIS EXISTS:
+  All settings (DB URLs, API keys, thresholds) live here in one place.
+  The app reads from environment variables (loaded from .env by python-dotenv).
+  If a required setting is missing, the app fails loudly at startup rather than
+  crashing mysteriously later — the "fail fast" principle.
+
+HOW IT WORKS:
+  1. Pydantic reads your .env file
+  2. Each field has a type annotation (str, int, float, list[str])
+  3. Pydantic validates every value and raises a clear error if types don't match
+  4. You get a fully type-safe `settings` object to import anywhere
+"""
+
+from functools import lru_cache
+from typing import List
+
+from pydantic import AnyHttpUrl, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """
+    All application settings, loaded from environment variables / .env file.
+
+    IMPORTANT: Add any new config values here — never use os.getenv() directly elsewhere.
+    """
+
+    # ── Pydantic Settings config ───────────────────────────────────────────────
+    # model_config tells Pydantic where to find the .env file.
+    # `extra="ignore"` means unknown env vars won't cause errors.
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # ── AI ────────────────────────────────────────────────────────────────────
+    anthropic_api_key: str = ""
+
+    # ── Database ──────────────────────────────────────────────────────────────
+    # NOTE: The URL must use `postgresql+asyncpg://` (not `postgresql://`) so
+    # SQLAlchemy knows to use the async asyncpg driver instead of psycopg2.
+    database_url: str = "postgresql+asyncpg://jobhunter:jobhunter@localhost:5432/jobhunter"
+    test_database_url: str = "postgresql+asyncpg://jobhunter:jobhunter@localhost:5432/jobhunter_test"
+
+    # ── Redis ─────────────────────────────────────────────────────────────────
+    redis_url: str = "redis://localhost:6379/0"
+    celery_result_backend: str = "redis://localhost:6379/1"
+
+    # ── API Server ────────────────────────────────────────────────────────────
+    api_host: str = "0.0.0.0"
+    api_port: int = 8000
+
+    # CORS origins: which frontend URLs are allowed to make API requests.
+    # In .env, set as a comma-separated string: "http://localhost:5173,http://localhost:3000"
+    # The @field_validator below converts that string into a Python list.
+    backend_cors_origins: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    @field_validator("backend_cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: str | list) -> list:
+        """
+        Convert a comma-separated CORS string from .env into a Python list.
+        If it's already a list (e.g. from a test override), pass through unchanged.
+        """
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",")]
+        return value
+
+    # ── Agent Behavior ────────────────────────────────────────────────────────
+    scraper_max_jobs_per_run: int = 100
+    match_score_threshold: int = 70
+    max_retry_attempts: int = 3
+    retry_base_delay: float = 1.0
+    scraper_interval_seconds: int = 3600
+
+    # ── Logging ───────────────────────────────────────────────────────────────
+    log_level: str = "INFO"
+
+
+# ── Singleton pattern via lru_cache ───────────────────────────────────────────
+# @lru_cache means this function is only ever called ONCE, no matter how many
+# times you call get_settings(). The result is cached.
+# WHY: Reading and validating the .env file on every request would be slow and wasteful.
+# This way, settings are parsed at startup and reused everywhere.
+@lru_cache()
+def get_settings() -> Settings:
+    """Return the cached application settings singleton."""
+    return Settings()
+
+
+# Convenience: a module-level `settings` object for simple imports.
+# Usage: `from core.config import settings`
+settings = get_settings()

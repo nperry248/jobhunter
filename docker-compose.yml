@@ -1,0 +1,65 @@
+# Docker Compose defines all the infrastructure services this project needs to run locally.
+# Run `docker-compose up -d` to start both services in the background.
+# Run `docker-compose down` to stop them. Add `-v` to also delete stored data.
+
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────────────────────────
+  # PostgreSQL — our primary database for storing jobs, applications, etc.
+  # We use PostgreSQL (not SQLite) because it supports concurrent writes
+  # from multiple Celery workers without locking.
+  # ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    # alpine = smaller image (≈85MB vs ≈350MB for the full image) — same functionality
+    container_name: jobhunter_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: jobhunter
+      POSTGRES_PASSWORD: jobhunter
+      POSTGRES_DB: jobhunter
+    ports:
+      # host_port:container_port — exposes Postgres on your localhost:5432
+      - "5432:5432"
+    volumes:
+      # Named volume: Docker manages where data is stored on disk.
+      # This means your job data persists even when the container restarts.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Docker will check if Postgres is actually accepting connections.
+      # Other services can declare `depends_on: postgres: condition: service_healthy`
+      # to wait until Postgres is ready before starting.
+      test: ["CMD-SHELL", "pg_isready -U jobhunter -d jobhunter"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # Redis — our task queue broker for Celery background workers.
+  # Celery agents publish tasks to Redis ("scrape LinkedIn now"),
+  # and Celery workers consume those tasks and execute them.
+  # Redis is also used to store short-lived state (e.g., rate limit counters).
+  # ─────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: jobhunter_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    # Persist Redis data to disk every 60s if at least 1 key changed.
+    # Without this, Redis loses all queue state on restart.
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# Named volumes — Docker manages the actual storage location.
+# These survive container restarts and `docker-compose down` (but not `down -v`).
+volumes:
+  postgres_data:
+  redis_data:
