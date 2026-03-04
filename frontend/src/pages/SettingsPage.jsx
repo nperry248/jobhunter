@@ -75,13 +75,16 @@ function Toggle({ label, description, checked, onChange }) {
       <button
         type="button"
         onClick={() => onChange(!checked)}
-        className={`relative w-10 h-5 rounded-full transition-colors ${
+        className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
           checked ? "bg-emerald-500/70" : "bg-white/[0.08]"
         }`}
       >
+        {/* Knob: left-0.5 anchors it 2px from the left edge when off.
+            translate-x-5 (20px) shifts it right when on.
+            Container is 44px, knob is 20px: 2px gap on both sides. */}
         <span
-          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-            checked ? "translate-x-5" : "translate-x-0.5"
+          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+            checked ? "translate-x-5" : "translate-x-0"
           }`}
         />
       </button>
