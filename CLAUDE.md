@@ -24,7 +24,15 @@ A real AI agent would receive a goal, decide which tools to call, observe the re
 
 ## Current Phase
 
-**Phase 3C — Apply Agent** ← UP NEXT
+**Phase 4 — Orchestrator** ← UP NEXT
+
+### Where we left off (end of session)
+- Phase 3C Apply Agent is built and tested (248 passing tests)
+- Live tested against real Greenhouse job postings — core fields fill correctly
+- Known limitation: custom questions, dropdowns, EEOC fields not yet handled
+- Decision: move to Phase 4 (Orchestrator) before investing in smarter form-filling
+- Smarter form-filling (DOM extraction → Claude → execute) is planned but deferred
+  until Phase 4 exists and real failure data shows which patterns matter most
 
 ---
 
@@ -103,29 +111,72 @@ celery -A workers.celery_app beat --loglevel=info -S workers.schedule  # Termina
 
 ---
 
-## What's Next — Phase 3C: Apply Agent
+### Phase 3C — Apply Agent ✅ COMPLETE
 
-The last remaining piece of Phase 3. Playwright browser automation that reads a user's "reviewed" jobs from the DB, loads each application URL, fills the form using data from `UserProfile`, and submits.
+- `backend/agents/apply_logic.py` — Pure functions: `ApplyConfig`, `ApplyResult`, `split_full_name`, `get_screenshots_dir`, `screenshot_filename`, `build_optional_field_map`
+- `backend/agents/apply.py` — Orchestration: `load_profile`, `fetch_reviewed_jobs`, `save_application`, `apply_greenhouse` (Playwright form filler), `run()` entry point
+- `backend/core/config.py` — 4 new settings: `apply_headless`, `apply_dry_run`, `apply_min_score`, `screenshots_dir`
+- `backend/.env.example` — Documented all 4 new Apply Agent env vars
+- 39 new tests — 30 unit (pure function coverage) + 9 integration (mocked Playwright)
+- **248 total passing tests**
 
-**Scope: Greenhouse applications only** (most standardized forms — Lever and others later)
+**Key design decisions:**
+- Functional core / imperative shell pattern (same as resume_match) — `apply_logic.py` has zero I/O, `apply.py` has all side effects
+- `DRY_RUN` mode fills forms and screenshots them but never clicks submit — safe on live job boards
+- min_score filtered in Python (not SQL) so `total_skipped` is observable in `ApplyResult`
+- One browser, one context, one page per job — reuse browser across jobs for speed
+- Each job in its own `try/except` — one broken form never stops the rest of the queue
+- `applied_at` timestamp set only on `SUBMITTED` (not dry runs or failures)
+- Dry run leaves `Job.status = REVIEWED` — can run for real later
+
+**To use:**
+```bash
+# Dry run — fill and screenshot, never submit (safe)
+python -m agents.apply --dry-run
+
+# Apply to all reviewed jobs above APPLY_MIN_SCORE
+python -m agents.apply
+
+# Target specific jobs by UUID
+python -m agents.apply --job-ids <uuid1> <uuid2>
+```
+
+---
+
+## What's Next — Phase 4: Orchestrator
+
+The Orchestrator is what turns this from a collection of scripts into an autonomous system. It's a real LLM agent (using Anthropic tool-use) that receives a high-level goal, decides which agents to invoke, observes results, and adapts.
+
+**Core idea:** The three existing agents (`scraper`, `resume_match`, `apply`) become **tools** the Orchestrator calls. Instead of running them manually or on a fixed schedule, the Orchestrator decides when and what to run based on current DB state and goals.
 
 **What to build:**
-1. `backend/agents/apply.py`
-   - `run(job_ids: list[UUID] | None)` — apply to specified jobs, or all "reviewed" jobs above `APPLY_MIN_SCORE`
-   - `apply_greenhouse(job: Job, profile: UserProfile, page: Page)` — Playwright automation
-   - Screenshots saved to `data/screenshots/` for audit trail
-   - Job status updated to `"applied"` or `"failed"` after each attempt
-2. New config vars in `core/config.py` + `.env.example`:
-   - `APPLY_HEADLESS=true` — run browser headless in prod, false for debugging
-   - `APPLY_MIN_SCORE=70` — only apply to jobs scoring above this threshold
-   - `SCREENSHOTS_DIR=data/screenshots`
-3. Tests: `tests/unit/test_apply.py` + `tests/integration/test_apply_pipeline.py`
 
-**Key design notes:**
-- Load profile from DB at start of run — fail fast if no profile or no resume
-- Apply to each job in a try/except — one failure must not stop the others
-- Screenshot the final page (success or error) before moving on
-- Greenhouse forms vary by company — need to handle optional fields gracefully
+1. `backend/agents/orchestrator.py` — the agent loop
+   - Uses Anthropic tool-use (function calling) to expose scraper/scorer/apply as tools
+   - Receives a goal: `"Find and apply to 5 good SWE jobs this week"`
+   - Observes state: checks DB for new jobs, scored jobs, pending applications
+   - Decides: run scraper? score unscored? apply to reviewed?
+   - Handles failures: if apply fails on 3 jobs, tries a different strategy
+
+2. `backend/api/routes/orchestrator.py` — API to trigger and monitor
+   - `POST /api/v1/orchestrator/run` — start an orchestrator session
+   - `GET /api/v1/orchestrator/status` — poll progress, see agent's reasoning
+   - `GET /api/v1/orchestrator/history` — past sessions + outcomes
+
+3. Frontend: Orchestrator panel in dashboard
+   - Start/stop button
+   - Live reasoning log (what the agent is thinking)
+   - Summary: "Applied to 3 jobs, skipped 2 (below threshold), 1 failed"
+
+**Key design decisions to make:**
+- Tool-use (Anthropic function calling) vs LangChain — lean toward raw Anthropic SDK, keeps dependency count low
+- How much autonomy: fully autonomous vs human-in-the-loop before each apply
+- State management: session stored in DB or Redis?
+
+**Apply Agent improvements (deferred from Phase 3C, do after Orchestrator works):**
+- DOM extraction → Claude → execute: read all form fields from the page, pass to Claude with profile, Claude returns fill instructions for every field including custom questions and dropdowns
+- EEOC/demographic fields: add to UserProfile, auto-fill
+- Multi-page form handling
 
 ---
 
@@ -163,6 +214,10 @@ python -m agents.scraper --dry-run
 python -m agents.scraper
 python -m agents.resume_match --resume /absolute/path/to/data/resumes/NickPerryResume.pdf
 # NOTE: resume path must be absolute — relative paths resolve from backend/, not project root
+APPLY_HEADLESS=false python -m agents.apply --dry-run   # fill forms visually, never submit
+python -m agents.apply --dry-run                         # same, headless
+python -m agents.apply                                   # real submissions (reviewed jobs above min_score)
+python -m agents.apply --job-ids <uuid1> <uuid2>         # target specific jobs
 
 # Celery (optional — Run Now button uses BackgroundTasks in dev, no worker needed)
 celery -A workers.celery_app worker --loglevel=info        # executes tasks
@@ -194,7 +249,9 @@ job-agent/
 │   │   ├── scraper.py              # Greenhouse + Lever scraper
 │   │   ├── scraper_parsers.py      # Pure parse + filter logic
 │   │   ├── resume_match.py         # Resume scoring orchestration
-│   │   └── resume_match_logic.py   # Pure scoring functions
+│   │   ├── resume_match_logic.py   # Pure scoring functions
+│   │   ├── apply.py                # Playwright form-filler orchestration
+│   │   └── apply_logic.py          # Pure apply functions (name split, screenshots, etc.)
 │   ├── api/
 │   │   ├── main.py                 # FastAPI app, CORS, routers
 │   │   └── routes/
@@ -275,8 +332,9 @@ job-agent/
 - [x] User profile stored → PostgreSQL (accessible to all Celery workers)
 - [x] AI model for scoring → Claude Haiku (cheap, fast, good enough for structured JSON)
 - [x] Branch strategy → `dev` for all work, merge to `main` when phase is complete
-- [ ] Apply Agent scope — start with Greenhouse only, or attempt Lever too? (Phase 3 decision)
-- [ ] Orchestration approach — simple Celery schedule, or real LLM agent with tool use? (Phase 4 decision)
+- [x] Apply Agent scope → Greenhouse only for v1; iframe-embedded forms handled
+- [x] Apply Agent form-filling → hardcoded required fields for now; LLM form-filling deferred to post-Phase-4
+- [ ] Orchestration approach — simple Celery schedule, or real LLM agent with tool use? (Phase 4 decision — leaning toward Anthropic tool-use)
 
 ---
 

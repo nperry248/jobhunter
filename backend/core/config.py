@@ -231,6 +231,26 @@ class Settings(BaseSettings):
             return json.loads(value)
         return value
 
+    # ── Apply Agent ───────────────────────────────────────────────────────────
+    # Run the Playwright browser in headless mode (no visible window).
+    # Set APPLY_HEADLESS=false in .env when debugging to watch the browser fill forms.
+    apply_headless: bool = True
+
+    # Fill forms and take screenshots, but NEVER click submit.
+    # Safe to run against live job boards for testing/verification.
+    # Can be overridden per-run by passing dry_run=True to run().
+    apply_dry_run: bool = False
+
+    # Only apply to jobs with match_score >= this value.
+    # WHY: No point auto-applying to a job you scored 30% on — save it for manual review.
+    # Set lower (e.g. 60.0) if you want to cast a wider net.
+    apply_min_score: float = 70.0
+
+    # Directory where Playwright screenshots are saved (form + result page per job).
+    # Path is relative to the project root (where you run the app from).
+    # A timestamp + job UUID in the filename ensures no two screenshots collide.
+    screenshots_dir: str = "data/screenshots"
+
     # ── Logging ───────────────────────────────────────────────────────────────
     log_level: str = "INFO"
 
