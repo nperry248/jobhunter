@@ -24,7 +24,7 @@ A real AI agent would receive a goal, decide which tools to call, observe the re
 
 ## Current Phase
 
-**Phase 3 — User Profile + Celery Scheduling + Apply Agent** ← UP NEXT
+**Phase 3C — Apply Agent** ← UP NEXT
 
 ---
 
@@ -66,6 +66,33 @@ A real AI agent would receive a goal, decide which tools to call, observe the re
 
 ---
 
+### Phase 3A — User Profile API + Settings UI ✅ COMPLETE
+
+- `backend/api/routes/profile.py` — `GET /api/v1/profile` (auto-create on first call) + `PUT /api/v1/profile`
+- `frontend/src/pages/SettingsPage.jsx` — full settings form: personal info, online presence, resume path, job preferences (toggles for remote/open-to-relocate/exclude-senior)
+- JSON list fields (`target_locations`, `company_blocklist`) stored as JSON strings in DB, exposed as `list[str]` via Pydantic `@field_validator`
+- 9 integration tests in `tests/integration/test_api_profile.py`
+- 209 passing tests total
+
+---
+
+### Phase 3B — Celery Scheduling + Run Now Button ✅ COMPLETE
+
+- `backend/workers/celery_app.py` — Celery app wired to Redis, `task_acks_late=True`, `prefetch_multiplier=1`
+- `backend/workers/tasks.py` — `scrape_task`, `score_task`, `scrape_and_score_task` (all use `asyncio.run()` to bridge sync Celery → async agents)
+- `backend/workers/schedule.py` — Celery Beat fires `scrape_and_score_task` at top of every hour
+- `backend/api/routes/pipeline.py` — `POST /api/v1/pipeline/run` (FastAPI BackgroundTasks, no Celery worker needed in dev) + `GET /api/v1/pipeline/status`
+- "Run Now" button in dashboard: polls status every 3s, shows pulsing indicator while running, displays result banner (new jobs / scored / duplicates) on completion
+- 13 unit tests for Celery tasks, 9 integration tests for pipeline endpoints
+
+**To run Celery in production:**
+```bash
+celery -A workers.celery_app worker --loglevel=info   # Terminal 1
+celery -A workers.celery_app beat --loglevel=info -S workers.schedule  # Terminal 2
+```
+
+---
+
 ### Phase 2 — Scraper Improvements ✅ COMPLETE (same session)
 
 - Tightened `swe_title_keywords` — removed standalone `"engineer"`/`"developer"` (too broad), replaced with specific phrases like `"software engineer"`, `"backend engineer"`, `"ml engineer"` etc.
@@ -76,13 +103,29 @@ A real AI agent would receive a goal, decide which tools to call, observe the re
 
 ---
 
-## What's Next — Phase 3
+## What's Next — Phase 3C: Apply Agent
 
-See `TODO_NEXT.md` for the full breakdown. High level:
+The last remaining piece of Phase 3. Playwright browser automation that reads a user's "reviewed" jobs from the DB, loads each application URL, fills the form using data from `UserProfile`, and submits.
 
-1. **User Profile API + Settings UI** — The UserProfile model exists in the DB but has no API or UI. Before the Apply Agent can work, it needs the user's name, email, LinkedIn, GitHub, etc.
-2. **Celery Scheduling** — Wire scraper + resume_match to run automatically on a schedule (e.g. every hour). Right now both are run manually from the CLI.
-3. **Apply Agent** — Playwright browser automation to auto-fill and submit Greenhouse applications. Start with Greenhouse (most standardized forms).
+**Scope: Greenhouse applications only** (most standardized forms — Lever and others later)
+
+**What to build:**
+1. `backend/agents/apply.py`
+   - `run(job_ids: list[UUID] | None)` — apply to specified jobs, or all "reviewed" jobs above `APPLY_MIN_SCORE`
+   - `apply_greenhouse(job: Job, profile: UserProfile, page: Page)` — Playwright automation
+   - Screenshots saved to `data/screenshots/` for audit trail
+   - Job status updated to `"applied"` or `"failed"` after each attempt
+2. New config vars in `core/config.py` + `.env.example`:
+   - `APPLY_HEADLESS=true` — run browser headless in prod, false for debugging
+   - `APPLY_MIN_SCORE=70` — only apply to jobs scoring above this threshold
+   - `SCREENSHOTS_DIR=data/screenshots`
+3. Tests: `tests/unit/test_apply.py` + `tests/integration/test_apply_pipeline.py`
+
+**Key design notes:**
+- Load profile from DB at start of run — fail fast if no profile or no resume
+- Apply to each job in a try/except — one failure must not stop the others
+- Screenshot the final page (success or error) before moving on
+- Greenhouse forms vary by company — need to handle optional fields gracefully
 
 ---
 
@@ -118,7 +161,12 @@ uvicorn api.main:app --reload --port 8000
 # Run agents manually
 python -m agents.scraper --dry-run
 python -m agents.scraper
-python -m agents.resume_match --resume /path/to/data/resumes/YourResume.pdf
+python -m agents.resume_match --resume /absolute/path/to/data/resumes/NickPerryResume.pdf
+# NOTE: resume path must be absolute — relative paths resolve from backend/, not project root
+
+# Celery (optional — Run Now button uses BackgroundTasks in dev, no worker needed)
+celery -A workers.celery_app worker --loglevel=info        # executes tasks
+celery -A workers.celery_app beat --loglevel=info -S workers.schedule  # triggers schedule
 
 # Database migrations
 alembic upgrade head
@@ -149,7 +197,14 @@ job-agent/
 │   │   └── resume_match_logic.py   # Pure scoring functions
 │   ├── api/
 │   │   ├── main.py                 # FastAPI app, CORS, routers
-│   │   └── routes/jobs.py          # GET /jobs, PATCH /jobs/{id}
+│   │   └── routes/
+│   │       ├── jobs.py             # GET /jobs, PATCH /jobs/{id}, DELETE /jobs
+│   │       ├── profile.py          # GET /profile, PUT /profile
+│   │       └── pipeline.py         # POST /pipeline/run, GET /pipeline/status
+│   ├── workers/
+│   │   ├── celery_app.py           # Celery app instance + config
+│   │   ├── tasks.py                # scrape_task, score_task, scrape_and_score_task
+│   │   └── schedule.py             # Celery Beat hourly schedule
 │   ├── core/
 │   │   ├── config.py               # Pydantic Settings (reads .env)
 │   │   ├── database.py             # Async SQLAlchemy engine + session
@@ -168,9 +223,9 @@ job-agent/
 ├── frontend/
 │   └── src/
 │       ├── pages/
-│       │   ├── JobsPage.jsx        # Main dashboard
-│       │   └── SettingsPage.jsx    # User profile (stub — Phase 3)
-│       └── api/client.js
+│       │   ├── JobsPage.jsx        # Main dashboard (filter, score badges, Run Now, Clear All)
+│       │   └── SettingsPage.jsx    # User profile form (personal info, preferences, toggles)
+│       └── api/client.js           # getJobs, updateJobStatus, clearAllJobs, runPipeline, getPipelineStatus, getProfile, updateProfile
 ├── data/
 │   └── resumes/                    # Resume PDFs (gitignored)
 ├── assets/                         # Static assets (screenshots for README etc.)
