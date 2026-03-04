@@ -39,6 +39,34 @@ _NEW_GRAD_KEYWORDS: frozenset[str] = frozenset([
     "early career", "campus",
 ])
 
+# Keywords that indicate a senior / management role to exclude.
+# WHY EXCLUDE NOT REQUIRE:
+#   Most entry-level jobs don't say "new grad" in the title — they just say
+#   "Software Engineer". Requiring new-grad keywords would filter out the
+#   majority of real entry-level roles. Blocking senior keywords is far more
+#   effective: it removes explicitly senior/management titles while letting
+#   unqualified titles ("Software Engineer", "Backend Engineer") through.
+#
+# WHY THESE SPECIFIC KEYWORDS:
+#   "senior" / "sr." — the most common seniority marker
+#   "staff" / "principal" — IC levels above senior at most companies
+#   "lead" — "Tech Lead", "Lead Engineer" (senior IC role)
+#   "manager" — "Engineering Manager" is not an IC contributor role
+#   "director" / "head of" — org leadership, not entry-level
+#   "architect" — "Software Architect" implies deep experience
+#   "distinguished" / "fellow" — highest IC levels (Google, Amazon, etc.)
+#   "vice president" / "vp " — executive level
+_SENIOR_TITLE_KEYWORDS: frozenset[str] = frozenset([
+    "senior", "sr.", " sr ",
+    "staff", "principal",
+    "lead",
+    "manager",
+    "director", "head of",
+    "architect",
+    "distinguished", "fellow",
+    "vice president", "vp ",
+])
+
 
 # ── ParsedJob ─────────────────────────────────────────────────────────────────
 # CONCEPT — Dataclass:
@@ -108,6 +136,15 @@ class ScraperFilters:
     # quota before any other company gets scraped. A per-company cap guarantees
     # diversity across the target company list.
     max_jobs_per_company: int = 5
+
+    # If True, reject any job whose title contains a senior-level keyword
+    # (senior, staff, principal, lead, manager, director, etc.)
+    # WHY: the SWE keyword filter catches role type (software vs sales) but not
+    # seniority. Without this, "Senior Software Engineer" floods results with
+    # roles expecting 5–10 years of experience.
+    # Default False so existing tests that don't set this are unaffected.
+    # scraper.py sets it True when building real default filters from settings.
+    exclude_senior: bool = False
 
 
 # ── Greenhouse Parser ─────────────────────────────────────────────────────────
@@ -285,13 +322,20 @@ def passes_filters(job: ParsedJob, filters: ScraperFilters) -> bool:
 
     # job_type == "any" → no filtering, all titles pass
 
-    # ── 3. Keyword filter ────────────────────────────────────────────────────
+    # ── 3. Senior title filter ────────────────────────────────────────────────
+    # If exclude_senior is set, reject jobs whose titles contain senior-level
+    # keywords. This runs BEFORE the keyword filter so we short-circuit fast.
+    if filters.exclude_senior:
+        if any(kw in title_lower for kw in _SENIOR_TITLE_KEYWORDS):
+            return False
+
+    # ── 4. Keyword filter ────────────────────────────────────────────────────
     # If keywords are specified, at least one must appear in the title.
     if filters.keywords:
         if not any(kw.lower() in title_lower for kw in filters.keywords):
             return False
 
-    # ── 4. Location filter ───────────────────────────────────────────────────
+    # ── 5. Location filter ───────────────────────────────────────────────────
     # If locations are specified, at least one must appear in the job's location string.
     # If the job has no location listed, it passes (remote-first = location unknown).
     if filters.locations and job.location:

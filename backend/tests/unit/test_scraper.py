@@ -365,3 +365,59 @@ class TestPassesFilters:
             keywords=["backend"],   # would pass
         )
         assert passes_filters(senior_backend, filters) is False
+
+    # ── Senior title filter ───────────────────────────────────────────────────
+
+    def test_exclude_senior_blocks_senior_title(self):
+        """'Senior Software Engineer' should be rejected when exclude_senior=True."""
+        job = make_job(title="Senior Software Engineer")
+        filters = ScraperFilters(exclude_senior=True)
+        assert passes_filters(job, filters) is False
+
+    def test_exclude_senior_blocks_staff(self):
+        """'Staff Engineer' should be rejected when exclude_senior=True."""
+        job = make_job(title="Staff Engineer")
+        filters = ScraperFilters(exclude_senior=True)
+        assert passes_filters(job, filters) is False
+
+    def test_exclude_senior_blocks_principal(self):
+        """'Principal Software Engineer' should be rejected."""
+        job = make_job(title="Principal Software Engineer")
+        filters = ScraperFilters(exclude_senior=True)
+        assert passes_filters(job, filters) is False
+
+    def test_exclude_senior_blocks_manager(self):
+        """'Engineering Manager' should be rejected."""
+        job = make_job(title="Engineering Manager, Platform")
+        filters = ScraperFilters(exclude_senior=True)
+        assert passes_filters(job, filters) is False
+
+    def test_exclude_senior_blocks_director(self):
+        """'Director of Engineering' should be rejected."""
+        job = make_job(title="Director of Software Engineering")
+        filters = ScraperFilters(exclude_senior=True)
+        assert passes_filters(job, filters) is False
+
+    def test_exclude_senior_passes_plain_swe(self):
+        """'Software Engineer' (no seniority) should pass when exclude_senior=True."""
+        job = make_job(title="Software Engineer")
+        filters = ScraperFilters(exclude_senior=True)
+        assert passes_filters(job, filters) is True
+
+    def test_exclude_senior_passes_intern(self):
+        """Intern roles should pass even when exclude_senior=True."""
+        job = make_job(title="Software Engineer Intern")
+        filters = ScraperFilters(exclude_senior=True)
+        assert passes_filters(job, filters) is True
+
+    def test_exclude_senior_false_allows_senior(self):
+        """When exclude_senior=False (default), senior titles pass through."""
+        job = make_job(title="Senior Software Engineer")
+        filters = ScraperFilters(exclude_senior=False)
+        assert passes_filters(job, filters) is True
+
+    def test_exclude_senior_case_insensitive(self):
+        """Senior keyword check should be case-insensitive."""
+        job = make_job(title="SENIOR Software Engineer")
+        filters = ScraperFilters(exclude_senior=True)
+        assert passes_filters(job, filters) is False

@@ -312,6 +312,7 @@ async def run(
             max_jobs=settings.scraper_max_jobs_per_run,
             max_jobs_per_company=settings.scraper_max_jobs_per_company,
             keywords=settings.swe_title_keywords,
+            exclude_senior=settings.scraper_exclude_senior,
         )
 
     result = ScraperResult()
@@ -489,17 +490,21 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # For new_grad via CLI: use exclude_senior instead of requiring new-grad
+    # keywords in the title. Most entry-level jobs just say "Software Engineer"
+    # without any "new grad" qualifier — requiring those keywords would miss them.
+    exclude_senior = settings.scraper_exclude_senior or args.job_type in ("new_grad", "internship")
+
     filters = ScraperFilters(
         job_type=args.job_type,
         # If no --keywords flag supplied, fall back to the configured SWE keywords.
-        # An empty list means "no keyword filter" (all titles pass), which is not
-        # what we want for a default CLI run — we always want SWE-only titles.
         keywords=args.keywords or settings.swe_title_keywords,
         locations=args.locations,
         greenhouse_slugs=settings.greenhouse_slugs,
         lever_slugs=settings.lever_slugs,
         max_jobs=settings.scraper_max_jobs_per_run,
         max_jobs_per_company=settings.scraper_max_jobs_per_company,
+        exclude_senior=exclude_senior,
     )
 
     result = asyncio.run(run(filters=filters, dry_run=args.dry_run))

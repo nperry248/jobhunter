@@ -93,6 +93,10 @@ class Settings(BaseSettings):
     # A cap of 5 means ~5 relevant jobs per company × 31 companies = up to 155
     # candidates, then we pick the best 50 after filtering.
     scraper_max_jobs_per_company: int = 5
+    # Whether to exclude senior/management titles from scraped results.
+    # True by default — this system targets entry-level/new-grad roles.
+    # Set to False in .env if you want to see all seniority levels.
+    scraper_exclude_senior: bool = True
     match_score_threshold: int = 70
     max_retry_attempts: int = 3
     retry_base_delay: float = 1.0

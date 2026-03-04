@@ -76,6 +76,20 @@ export async function updateJobStatus(jobId, status) {
   });
 }
 
+/**
+ * Hard-delete all jobs from the database.
+ * @returns {void}
+ */
+export async function clearAllJobs() {
+  const response = await fetch(`${BASE_URL}/api/v1/jobs`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status} ${response.statusText} on DELETE /api/v1/jobs`);
+  }
+}
+
 // ── Profile API ───────────────────────────────────────────────────────────────
 
 /**
