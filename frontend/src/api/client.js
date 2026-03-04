@@ -90,6 +90,25 @@ export async function clearAllJobs() {
   }
 }
 
+// ── Pipeline API ──────────────────────────────────────────────────────────────
+
+/**
+ * Trigger the scrape + score pipeline in the background.
+ * Returns immediately — poll getPipelineStatus() to track progress.
+ * @returns {{ status: "started" | "already_running" }}
+ */
+export async function runPipeline() {
+  return request("/api/v1/pipeline/run", { method: "POST" });
+}
+
+/**
+ * Get the current pipeline run state.
+ * @returns {{ running: boolean, started_at: string|null, finished_at: string|null, last_result: object|null, last_error: string|null }}
+ */
+export async function getPipelineStatus() {
+  return request("/api/v1/pipeline/status");
+}
+
 // ── Profile API ───────────────────────────────────────────────────────────────
 
 /**

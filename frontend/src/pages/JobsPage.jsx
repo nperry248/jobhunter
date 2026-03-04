@@ -15,8 +15,8 @@
  *   - useCallback: memoize a function so it's stable across renders
  */
 
-import { useState, useEffect, useCallback } from "react";
-import { getJobs, updateJobStatus, clearAllJobs } from "../api/client";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { getJobs, updateJobStatus, clearAllJobs, runPipeline, getPipelineStatus } from "../api/client";
 
 // How many jobs to show per page. Matches the API default.
 const PAGE_SIZE = 20;
@@ -176,6 +176,9 @@ export function JobsPage() {
   const [offset, setOffset]   = useState(0);      // pagination offset
   const [clearing, setClearing] = useState(false); // clear-all in flight
   const [confirmClear, setConfirmClear] = useState(false); // show confirmation
+  const [pipelineRunning, setPipelineRunning] = useState(false); // pipeline in progress
+  const [pipelineResult, setPipelineResult] = useState(null);   // last run summary
+  const pollRef = useRef(null); // holds the setInterval ID so we can clear it
 
   // ── Data Fetching ──────────────────────────────────────────────────────────
   // CONCEPT — useEffect:
@@ -238,6 +241,52 @@ export function JobsPage() {
     }
   }
 
+  // ── Run Pipeline ───────────────────────────────────────────────────────────
+  // CONCEPT — Polling:
+  //   The pipeline runs in the background on the server. We don't get a
+  //   WebSocket or push notification when it finishes. Instead we poll
+  //   GET /pipeline/status every 3 seconds until `running` goes false.
+  //   When it does, we stop polling and refresh the jobs list.
+  //
+  //   useRef stores the interval ID so we can clear it from anywhere — if we
+  //   stored it in useState, clearing it would trigger a re-render.
+
+  async function handleRunPipeline() {
+    try {
+      await runPipeline();
+      setPipelineRunning(true);
+
+      // Start polling every 3 seconds
+      pollRef.current = setInterval(async () => {
+        try {
+          const status = await getPipelineStatus();
+          if (!status.running) {
+            // Pipeline finished — stop polling, store result, refresh jobs
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+            setPipelineRunning(false);
+            setPipelineResult(status.last_error
+              ? { error: status.last_error }
+              : status.last_result
+            );
+            fetchJobs();
+          }
+        } catch {
+          // Polling error — keep trying, don't stop
+        }
+      }, 3000);
+    } catch (err) {
+      console.error("Failed to start pipeline:", err);
+    }
+  }
+
+  // Clean up the polling interval if the component unmounts mid-run
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
   // ── Filter Change ──────────────────────────────────────────────────────────
   function handleFilterChange(value) {
     setFilter(value);
@@ -261,6 +310,23 @@ export function JobsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Run Now — triggers scrape + score pipeline, polls until done */}
+          <button
+            onClick={handleRunPipeline}
+            disabled={pipelineRunning}
+            className={`text-xs transition-colors px-3 py-1.5 rounded border ${
+              pipelineRunning
+                ? "text-blue-400 border-blue-500/30 cursor-not-allowed"
+                : "text-zinc-400 hover:text-blue-400 border-white/[0.06] hover:border-blue-500/30"
+            }`}
+          >
+            {pipelineRunning ? (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                Running…
+              </span>
+            ) : "Run Now"}
+          </button>
           <button
             onClick={fetchJobs}
             className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-3 py-1.5 rounded border border-white/[0.06] hover:border-white/[0.12]"
@@ -294,6 +360,28 @@ export function JobsPage() {
           )}
         </div>
       </div>
+
+      {/* Pipeline Result Banner */}
+      {pipelineResult && !pipelineRunning && (
+        <div className={`mb-4 px-4 py-3 rounded-lg border text-xs flex items-center justify-between ${
+          pipelineResult.error
+            ? "border-red-500/20 bg-red-500/5 text-red-400"
+            : "border-white/[0.06] bg-white/[0.02] text-zinc-400"
+        }`}>
+          {pipelineResult.error ? (
+            <span>Pipeline error: {pipelineResult.error}</span>
+          ) : (
+            <span>
+              Last run: <span className="text-white">{pipelineResult.scrape?.total_new ?? 0} new jobs</span> scraped,{" "}
+              <span className="text-white">{pipelineResult.score?.total_scored ?? 0} scored</span>
+              {pipelineResult.scrape?.total_duplicate > 0 && (
+                <span className="text-zinc-600"> · {pipelineResult.scrape.total_duplicate} duplicates skipped</span>
+              )}
+            </span>
+          )}
+          <button onClick={() => setPipelineResult(null)} className="text-zinc-600 hover:text-zinc-400 ml-4">✕</button>
+        </div>
+      )}
 
       {/* Filter Tabs */}
       <div className="flex gap-1 mb-6 bg-white/[0.03] p-1 rounded-lg w-fit">
