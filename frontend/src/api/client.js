@@ -62,10 +62,10 @@ export async function getJobs({ status = null, limit = 20, offset = 0 } = {}) {
 }
 
 /**
- * Update a job's status to "reviewed" or "ignored".
+ * Update a job's status to "reviewed", "ignored", or "scored" (undo).
  *
  * @param {string} jobId   - UUID of the job to update
- * @param {string} status  - "reviewed" or "ignored"
+ * @param {string} status  - "reviewed", "ignored", or "scored"
  *
  * @returns {Job} The updated job object
  */
@@ -73,5 +73,41 @@ export async function updateJobStatus(jobId, status) {
   return request(`/api/v1/jobs/${jobId}`, {
     method: "PATCH",
     body: JSON.stringify({ status }),
+  });
+}
+
+/**
+ * Hard-delete all jobs from the database.
+ * @returns {void}
+ */
+export async function clearAllJobs() {
+  const response = await fetch(`${BASE_URL}/api/v1/jobs`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status} ${response.statusText} on DELETE /api/v1/jobs`);
+  }
+}
+
+// ── Profile API ───────────────────────────────────────────────────────────────
+
+/**
+ * Fetch the user's profile. Auto-creates an empty one on first call.
+ * @returns {Profile}
+ */
+export async function getProfile() {
+  return request("/api/v1/profile");
+}
+
+/**
+ * Save all profile fields.
+ * @param {object} profile - Full profile object to save
+ * @returns {Profile} The saved profile
+ */
+export async function updateProfile(profile) {
+  return request("/api/v1/profile", {
+    method: "PUT",
+    body: JSON.stringify(profile),
   });
 }

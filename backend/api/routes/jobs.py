@@ -30,9 +30,9 @@ CONCEPT — APIRouter:
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
@@ -195,6 +195,26 @@ async def list_jobs(
         limit=limit,
         offset=offset,
     )
+
+
+# ── DELETE /api/v1/jobs ───────────────────────────────────────────────────────
+
+@router.delete("", status_code=204)
+async def clear_all_jobs(db: AsyncSession = Depends(get_db)) -> Response:
+    """
+    Hard-delete all jobs from the database.
+
+    Used by the dashboard "Clear All Jobs" button to wipe the slate before a
+    fresh scrape run. Returns 204 No Content on success.
+
+    WHY HARD DELETE (not soft delete):
+      This is a deliberate user action to reset the job list. Soft deletes
+      would just hide the rows but keep them consuming space. A hard DELETE
+      is cleaner and the data can always be re-scraped.
+    """
+    await db.execute(delete(Job))
+    await db.flush()
+    return Response(status_code=204)
 
 
 # ── PATCH /api/v1/jobs/{id} ───────────────────────────────────────────────────

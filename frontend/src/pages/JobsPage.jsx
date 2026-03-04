@@ -16,7 +16,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { getJobs, updateJobStatus } from "../api/client";
+import { getJobs, updateJobStatus, clearAllJobs } from "../api/client";
 
 // How many jobs to show per page. Matches the API default.
 const PAGE_SIZE = 20;
@@ -174,6 +174,8 @@ export function JobsPage() {
   const [error, setError]     = useState(null);
   const [filter, setFilter]   = useState(null);   // active status filter
   const [offset, setOffset]   = useState(0);      // pagination offset
+  const [clearing, setClearing] = useState(false); // clear-all in flight
+  const [confirmClear, setConfirmClear] = useState(false); // show confirmation
 
   // ── Data Fetching ──────────────────────────────────────────────────────────
   // CONCEPT — useEffect:
@@ -220,6 +222,22 @@ export function JobsPage() {
     }
   }
 
+  // ── Clear All Jobs ─────────────────────────────────────────────────────────
+  async function handleClearAll() {
+    setClearing(true);
+    try {
+      await clearAllJobs();
+      setJobs([]);
+      setTotal(0);
+      setOffset(0);
+    } catch (err) {
+      console.error("Failed to clear jobs:", err);
+    } finally {
+      setClearing(false);
+      setConfirmClear(false);
+    }
+  }
+
   // ── Filter Change ──────────────────────────────────────────────────────────
   function handleFilterChange(value) {
     setFilter(value);
@@ -242,12 +260,39 @@ export function JobsPage() {
             {loading ? "Loading…" : `${total} job${total !== 1 ? "s" : ""} found`}
           </p>
         </div>
-        <button
-          onClick={fetchJobs}
-          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-3 py-1.5 rounded border border-white/[0.06] hover:border-white/[0.12]"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchJobs}
+            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-3 py-1.5 rounded border border-white/[0.06] hover:border-white/[0.12]"
+          >
+            Refresh
+          </button>
+          {!confirmClear ? (
+            <button
+              onClick={() => setConfirmClear(true)}
+              className="text-xs text-zinc-600 hover:text-red-400 transition-colors px-3 py-1.5 rounded border border-white/[0.06] hover:border-red-500/30"
+            >
+              Clear All
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-red-500/30 bg-red-500/5">
+              <span className="text-xs text-red-400">Delete all jobs?</span>
+              <button
+                onClick={handleClearAll}
+                disabled={clearing}
+                className="text-xs text-red-400 hover:text-red-300 font-medium disabled:opacity-50 transition-colors"
+              >
+                {clearing ? "Clearing…" : "Yes"}
+              </button>
+              <button
+                onClick={() => setConfirmClear(false)}
+                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Filter Tabs */}
