@@ -31,7 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 from core.database import engine
 
-from api.routes import jobs, profile
+from api.routes import jobs, profile, pipeline
 # TODO: Uncomment as routes are implemented in later steps:
 # from api.routes import applications
 
@@ -119,6 +119,7 @@ app.add_middleware(
 #
 app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["jobs"])
 app.include_router(profile.router, prefix="/api/v1/profile", tags=["profile"])
+app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["pipeline"])
 # TODO: Uncomment as route files are implemented:
 # app.include_router(applications.router, prefix="/api/v1/applications", tags=["applications"])
 
