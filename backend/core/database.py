@@ -19,6 +19,7 @@ CONCEPT — Connection Pooling:
 """
 
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -105,3 +106,31 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.rollback()
             raise
         # The `async with` block automatically closes the session here.
+
+
+# ── Context Manager: get_db_context ───────────────────────────────────────────
+# A version of get_db() for use OUTSIDE of FastAPI's dependency injection system.
+# Use this in agents/scripts that need a DB session but aren't route handlers.
+#
+# WHY A SEPARATE FUNCTION?
+#   `get_db()` is an async generator designed for FastAPI's Depends() mechanism.
+#   Outside FastAPI routes (e.g. background agents, CLI scripts), you can't use Depends().
+#   `get_db_context()` gives you the same session + commit/rollback behaviour as an
+#   async context manager you can use with `async with get_db_context() as session:`.
+#
+# Usage:
+#   async with get_db_context() as session:
+#       result = await session.execute(select(Job))
+@asynccontextmanager
+async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Async context manager yielding a database session for use outside FastAPI routes.
+    Commits on clean exit, rolls back on exception, always closes the session.
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

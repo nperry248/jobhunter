@@ -231,6 +231,55 @@ class Settings(BaseSettings):
             return json.loads(value)
         return value
 
+    # ── Apply Agent ───────────────────────────────────────────────────────────
+    # Run the Playwright browser in headless mode (no visible window).
+    # Set APPLY_HEADLESS=false in .env when debugging to watch the browser fill forms.
+    apply_headless: bool = True
+
+    # Fill forms and take screenshots, but NEVER click submit.
+    # Safe to run against live job boards for testing/verification.
+    # Can be overridden per-run by passing dry_run=True to run().
+    apply_dry_run: bool = False
+
+    # Only apply to jobs with match_score >= this value.
+    # WHY: No point auto-applying to a job you scored 30% on — save it for manual review.
+    # Set lower (e.g. 60.0) if you want to cast a wider net.
+    apply_min_score: float = 70.0
+
+    # Directory where Playwright screenshots are saved (form + result page per job).
+    # Path is relative to the project root (where you run the app from).
+    # A timestamp + job UUID in the filename ensures no two screenshots collide.
+    screenshots_dir: str = "data/screenshots"
+
+    # Handoff mode: fill the form in a VISIBLE browser, then pause so the user can
+    # complete any remaining fields (custom questions, dropdowns, EEOC) and submit.
+    # WHY: The agent handles standard fields reliably; custom fields vary too much
+    # to fill automatically until we build the full LLM form-reader in a later phase.
+    # When True, headless is automatically forced to False (you can't see a hidden browser).
+    apply_handoff: bool = False
+
+    # How long (seconds) to keep the browser open in handoff mode waiting for the
+    # user to complete and submit the form. Default 300 = 5 minutes per job.
+    apply_handoff_wait_seconds: int = 300
+
+    # ── Orchestrator ──────────────────────────────────────────────────────────
+    # The LLM model the Orchestrator uses for tool-use decisions.
+    # Haiku is fast and cheap — good for development. Swap to Sonnet for more
+    # complex multi-step reasoning in production.
+    orchestrator_model: str = "claude-haiku-4-5-20251001"
+
+    # Hard cap on how many tool calls (turns) the Orchestrator makes per session.
+    # WHY: Without a cap, a misbehaving agent could loop forever and rack up API costs.
+    # 10 turns is plenty for scrape → score → review → apply (with checks in between).
+    orchestrator_max_turns: int = 10
+
+    # Max tokens per Claude response. 4096 is generous for structured tool-use JSON.
+    orchestrator_max_tokens: int = 4096
+
+    # If True, the Orchestrator won't fire real agents (scraper, scorer, apply).
+    # Tools will return mock data. Safe for UI/logic testing without API calls or DB writes.
+    orchestrator_dry_run: bool = False
+
     # ── Logging ───────────────────────────────────────────────────────────────
     log_level: str = "INFO"
 

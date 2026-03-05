@@ -5,6 +5,7 @@
 # (directly or transitively), Alembic won't see it and won't generate its migration.
 from models.application import Application
 from models.job import Job
+from models.orchestrator_session import OrchestratorSession
 from models.user_profile import UserProfile
 
-__all__ = ["Job", "Application", "UserProfile"]
+__all__ = ["Job", "Application", "UserProfile", "OrchestratorSession"]

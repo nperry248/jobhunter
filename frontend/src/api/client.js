@@ -130,3 +130,59 @@ export async function updateProfile(profile) {
     body: JSON.stringify(profile),
   });
 }
+
+// ── Orchestrator API ───────────────────────────────────────────────────────────
+
+/**
+ * Start a new Orchestrator session.
+ * Returns immediately — poll getOrchestratorStatus() to track progress.
+ *
+ * @param {string}  goal    - Natural-language goal (e.g. "Find me 5 good SWE jobs")
+ * @param {boolean} dry_run - If true, tools won't fire real agents
+ * @returns {{ session_id: string, status: "started" }}
+ */
+export async function startOrchestrator(goal, dry_run = false, mode = "fresh_scan", handoff = false, max_apply = 5) {
+  return request("/api/v1/orchestrator/run", {
+    method: "POST",
+    body: JSON.stringify({ goal, dry_run, mode, handoff, max_apply }),
+  });
+}
+
+/**
+ * Get the current state of an Orchestrator session.
+ * Poll this every 2s while status === "running".
+ *
+ * @param {string} session_id - UUID returned by startOrchestrator()
+ * @returns {SessionStatus}
+ */
+export async function getOrchestratorStatus(session_id) {
+  return request(`/api/v1/orchestrator/status/${session_id}`);
+}
+
+/**
+ * Approve the pending job list and trigger the Apply Agent.
+ * Only valid when the session is in "waiting_for_approval" state.
+ *
+ * @param {string}        session_id          - The session to approve
+ * @param {string[]|null} approved_job_ids    - Specific job IDs to approve, or null for all
+ * @returns {{ session_id: string, status: "started" }}
+ */
+export async function approveOrchestrator(session_id, approved_job_ids = null) {
+  return request(`/api/v1/orchestrator/approve/${session_id}`, {
+    method: "POST",
+    body: JSON.stringify({ approved_job_ids }),
+  });
+}
+
+/**
+ * Fetch past Orchestrator sessions (most recent first).
+ *
+ * @param {object} params
+ * @param {number} params.limit  - Max results (default 20)
+ * @param {number} params.offset - Pagination offset
+ * @returns {HistoryItem[]}
+ */
+export async function getOrchestratorHistory({ limit = 20, offset = 0 } = {}) {
+  const params = new URLSearchParams({ limit, offset });
+  return request(`/api/v1/orchestrator/history?${params}`);
+}
