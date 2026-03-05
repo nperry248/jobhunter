@@ -29,6 +29,8 @@ const STATUS_FILTERS = [
   { label: "Scored",   value: "scored" },
   { label: "Reviewed", value: "reviewed" },
   { label: "Ignored",  value: "ignored" },
+  { label: "Applied",  value: "applied" },
+  { label: "Failed",   value: "failed" },
 ];
 
 
@@ -69,21 +71,31 @@ function StatusPill({ status }) {
 
 
 // ── Job Card ──────────────────────────────────────────────────────────────────
+// Clicking anywhere on the main row (title / company / reasoning) toggles an
+// expanded detail panel below the card. The chevron button also toggles it.
+// Action buttons (View ↗, Reviewed, Ignore, Undo) stop propagation so they
+// don't accidentally toggle the expand state when clicked.
 
 function JobCard({ job, onStatusChange }) {
   const badge = scoreBadge(job.match_score);
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className={`border border-white/[0.06] rounded-lg p-4 transition-opacity duration-200 ${job.status === "ignored" ? "opacity-40" : ""}`}>
-      <div className="flex items-start gap-4">
+    <div className={`border border-white/[0.06] rounded-lg transition-opacity duration-200 ${job.status === "ignored" ? "opacity-40" : ""}`}>
+
+      {/* ── Main row — always visible ── */}
+      <div className="p-4 flex items-start gap-4">
 
         {/* Score badge */}
         <div className={`flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-sm font-semibold ${badge.className}`}>
           {badge.label}
         </div>
 
-        {/* Main content */}
-        <div className="flex-1 min-w-0">
+        {/* Clickable content area — toggles expansion */}
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="flex-1 min-w-0 text-left"
+        >
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-sm font-semibold text-white">{job.title}</h3>
             <StatusPill status={job.status} />
@@ -94,14 +106,31 @@ function JobCard({ job, onStatusChange }) {
             {job.location && <span className="text-zinc-600"> · {job.location}</span>}
           </p>
 
-          {/* Claude's reasoning — shown when available */}
+          {/* Reasoning preview — clamped to 2 lines when collapsed */}
           {job.match_reasoning && (
             <p className="text-zinc-500 text-xs mt-1.5 line-clamp-2">{job.match_reasoning}</p>
           )}
-        </div>
+        </button>
 
-        {/* Actions */}
-        <div className="flex-shrink-0 flex items-center gap-2">
+        {/* Actions — stopPropagation so clicks don't toggle expand */}
+        <div className="flex-shrink-0 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+
+          {/* Expand / collapse chevron */}
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="text-zinc-600 hover:text-zinc-400 transition-colors p-1"
+            title={expanded ? "Collapse" : "Expand"}
+          >
+            {/* Chevron rotates 180° when expanded */}
+            <svg
+              className={`w-4 h-4 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+
           <a
             href={job.source_url}
             target="_blank"
@@ -140,6 +169,59 @@ function JobCard({ job, onStatusChange }) {
           )}
         </div>
       </div>
+
+      {/* ── Expanded detail panel ── */}
+      {expanded && (
+        <div className="border-t border-white/[0.06] px-4 py-3 space-y-3">
+
+          {/* Full reasoning text (no clamp) */}
+          {job.match_reasoning && (
+            <div>
+              <p className="text-xs text-zinc-600 font-medium mb-1 uppercase tracking-wide">Match Reasoning</p>
+              <p className="text-zinc-400 text-xs leading-relaxed">{job.match_reasoning}</p>
+            </div>
+          )}
+
+          {/* Metadata row: source, dates */}
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
+            {job.source && (
+              <span className="text-zinc-600">
+                Source: <span className="text-zinc-400 capitalize">{job.source}</span>
+              </span>
+            )}
+            {job.scraped_at && (
+              <span className="text-zinc-600">
+                Scraped: <span className="text-zinc-400">{new Date(job.scraped_at).toLocaleDateString()}</span>
+              </span>
+            )}
+            {job.scored_at && (
+              <span className="text-zinc-600">
+                Scored: <span className="text-zinc-400">{new Date(job.scored_at).toLocaleDateString()}</span>
+              </span>
+            )}
+            {job.applied_at && (
+              <span className="text-zinc-600">
+                Applied: <span className="text-zinc-400">{new Date(job.applied_at).toLocaleDateString()}</span>
+              </span>
+            )}
+          </div>
+
+          {/* Full URL */}
+          {job.source_url && (
+            <p className="text-xs text-zinc-600 break-all">
+              <span className="mr-1">URL:</span>
+              <a
+                href={job.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-500/70 hover:text-blue-400 transition-colors"
+              >
+                {job.source_url}
+              </a>
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

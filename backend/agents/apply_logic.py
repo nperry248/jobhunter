@@ -34,11 +34,16 @@ class ApplyConfig:
     Configuration for one Apply Agent run.
 
     Fields:
-        headless:         Run Playwright's Chromium invisibly (prod) or visibly (debug).
-        dry_run:          Fill the form but never click submit — safe on live job boards.
-        min_score:        Skip jobs below this match_score.
-        screenshots_dir:  Directory to save Playwright screenshots for audit trail.
-        page_timeout_ms:  Milliseconds to wait for each page navigation before giving up.
+        headless:              Run Playwright's Chromium invisibly (prod) or visibly (debug).
+        dry_run:               Fill the form but never click submit — safe on live job boards.
+        handoff:               Fill the form in a visible browser and wait for the user to
+                               complete any remaining fields and submit manually. Overrides
+                               dry_run (handoff always uses a visible browser).
+        handoff_wait_seconds:  How long to keep the browser open in handoff mode before
+                               moving to the next job. Default 300 = 5 minutes.
+        min_score:             Skip jobs below this match_score.
+        screenshots_dir:       Directory to save Playwright screenshots for audit trail.
+        page_timeout_ms:       Milliseconds to wait for each page navigation before giving up.
 
     WHY A DATACLASS OVER HARDCODING:
       Same reason as MatchConfig in resume_match_logic.py — lets tests inject custom
@@ -48,6 +53,8 @@ class ApplyConfig:
 
     headless: bool = True
     dry_run: bool = False
+    handoff: bool = False
+    handoff_wait_seconds: int = 300   # 5 minutes for user to complete and submit
     min_score: float = 70.0
     screenshots_dir: str = "data/screenshots"
     page_timeout_ms: int = 30_000   # 30 seconds per page navigation

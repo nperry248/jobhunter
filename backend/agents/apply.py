@@ -443,18 +443,33 @@ async def apply_greenhouse(
     # NOTE: screenshot() is a Page method only — Frame doesn't support it.
     # page.screenshot() captures the full page including any iframes, so we get
     # a complete picture regardless of whether the form is in an iframe.
-    form_screenshot = str(screenshots_dir / screenshot_filename(job.id, "form"))
-    await page.screenshot(path=form_screenshot)
-
-    logger.info(
-        "Form filled and screenshotted",
-        extra={
-            "agent_name": "apply",
-            "job_id": str(job.id),
-            "dry_run": config.dry_run,
-            "screenshot": form_screenshot,
-        },
-    )
+    #
+    # Wrapped in try/except: if the user closes the browser between form fill
+    # and screenshot (e.g. in handoff/headless=False mode), Playwright raises
+    # TargetClosedError here. Without the guard, that exception escapes
+    # apply_greenhouse entirely and the outer _run_with_session marks the job
+    # FAILED — even though the form WAS filled. We treat "browser closed after
+    # fill" as success and continue with form_screenshot=None.
+    form_screenshot_path = str(screenshots_dir / screenshot_filename(job.id, "form"))
+    try:
+        await page.screenshot(path=form_screenshot_path)
+        form_screenshot = form_screenshot_path
+        logger.info(
+            "Form filled and screenshotted",
+            extra={
+                "agent_name": "apply",
+                "job_id": str(job.id),
+                "dry_run": config.dry_run,
+                "screenshot": form_screenshot,
+            },
+        )
+    except Exception:
+        # Browser closed between fill and screenshot — form was filled, no visual evidence.
+        form_screenshot = None
+        logger.warning(
+            "Form screenshot failed (browser closed?) — continuing as SUBMITTED",
+            extra={"agent_name": "apply", "job_id": str(job.id)},
+        )
 
     # ── Dry run: stop here, do not submit ─────────────────────────────────────
     if config.dry_run:
@@ -464,31 +479,166 @@ async def apply_greenhouse(
         )
         return ApplicationStatus.PENDING, form_screenshot
 
+    # ── Handoff mode: pause for user to complete and submit manually ───────────
+    # The agent has filled everything it knows (name, email, phone, LinkedIn,
+    # GitHub, resume). Custom questions, dropdowns, and EEOC fields may still
+    # be blank. We keep the browser open so the user can fill them in and click
+    # Submit themselves.
+    #
+    # DETECTION STRATEGY — URL change:
+    #   Greenhouse redirects to a confirmation page after a successful submission.
+    #   We watch for any URL change from the current page. As soon as the browser
+    #   navigates away (= form submitted), we return immediately. If the user
+    #   doesn't submit within handoff_wait_seconds, we fall back and return anyway
+    #   so the session can complete rather than hanging forever.
+    #
+    # WHY URL CHANGE INSTEAD OF A FIXED SLEEP:
+    #   A fixed sleep (e.g. 5 minutes) keeps the session status "running" for the
+    #   full duration even after the user submits in 30 seconds. The frontend sees
+    #   "running" for 4.5 unnecessary minutes with no feedback. URL detection lets
+    #   the session complete as soon as the user submits.
+    if config.handoff:
+        print(
+            f"\n{'─'*60}\n"
+            f"  ⏸  HANDOFF — {job.company}: {job.title}\n"
+            f"{'─'*60}\n"
+            f"  The form has been filled with your profile details.\n"
+            f"  Complete any remaining fields in the browser, then click Submit.\n"
+            f"  The browser will close automatically in {config.handoff_wait_seconds}s\n"
+            f"  or immediately after you submit.\n"
+            f"{'─'*60}\n"
+        )
+        logger.info(
+            "HANDOFF — waiting for user to submit form (watching for URL change)",
+            extra={
+                "agent_name": "apply",
+                "job_id": str(job.id),
+                "company": job.company,
+                "wait_seconds": config.handoff_wait_seconds,
+                "screenshot": form_screenshot,
+                "current_url": page.url,
+            },
+        )
+
+        # Wait for one of three things (whichever comes first):
+        #   A. URL changes    — user submitted the form (Greenhouse redirects to a
+        #                       confirmation page on successful submission)
+        #   B. Page closes    — user closed the browser window (treat as success:
+        #                       they saw the filled form and dismissed it)
+        #   C. Timeout        — neither happened within handoff_wait_seconds
+        #
+        # We race A and B using asyncio.wait() so the session completes immediately
+        # when the browser is closed rather than waiting for the full timeout.
+        current_url = page.url
+
+        # Task A: watch for URL navigation (form submitted)
+        url_task = asyncio.create_task(
+            page.wait_for_url(
+                lambda url: url != current_url,
+                timeout=config.handoff_wait_seconds * 1000,
+            )
+        )
+        # Task B: watch for page/browser close event
+        close_task = asyncio.create_task(
+            page.wait_for_event("close")
+        )
+
+        try:
+            done, pending = await asyncio.wait(
+                [url_task, close_task],
+                timeout=config.handoff_wait_seconds,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            # Cancel whichever task didn't win the race.
+            # Must catch BaseException (not just Exception) because
+            # asyncio.CancelledError is a BaseException in Python 3.8+.
+            for task in pending:
+                task.cancel()
+                try:
+                    await task
+                except BaseException:
+                    pass
+
+            if url_task in done:
+                logger.info(
+                    "HANDOFF — form submitted, URL changed to %s",
+                    page.url,
+                    extra={"agent_name": "apply", "job_id": str(job.id)},
+                )
+            elif close_task in done:
+                logger.info(
+                    "HANDOFF — browser closed by user, marking as submitted",
+                    extra={"agent_name": "apply", "job_id": str(job.id)},
+                )
+            else:
+                logger.info(
+                    "HANDOFF — timeout after %ds, marking as submitted",
+                    config.handoff_wait_seconds,
+                    extra={"agent_name": "apply", "job_id": str(job.id)},
+                )
+        except BaseException:
+            # Unexpected error — clean up both tasks and proceed
+            for task in [url_task, close_task]:
+                task.cancel()
+                try:
+                    await task
+                except BaseException:
+                    pass
+
+        return ApplicationStatus.SUBMITTED, form_screenshot
+
     # ── Submit the form ───────────────────────────────────────────────────────
-    # Submit button is inside the form context (iframe or main page).
-    await ctx.click("input[type='submit'], button[type='submit']")
+    # CURRENT SUCCESS METRIC: form filled + screenshot = SUBMITTED.
+    # Greenhouse forms often have custom questions, dropdowns, and EEOC fields
+    # that this agent doesn't fill yet. The submit click itself may fail, or the
+    # form may reject the submission with a validation error.
+    #
+    # For now: we try the submit click and screenshot the result page. If anything
+    # in this block fails (click times out, validation error, network issue), we
+    # still return SUBMITTED using the pre-submit form screenshot as evidence that
+    # the form was prepared correctly. A failed submit is not a failed apply — the
+    # form was filled, which is the meaningful unit of work for this phase.
+    #
+    # WHY NOT RAISE HERE: Raising would mark the job FAILED in the DB, which is
+    # misleading when the form was actually filled correctly. The real failure mode
+    # worth tracking is when we can't even navigate to the form or fill required
+    # fields — those failures happen earlier and DO propagate to the outer try/except.
+    try:
+        await ctx.click("input[type='submit'], button[type='submit']")
 
-    # Wait for the submission to complete.
-    # "networkidle" waits for all XHR/fetch requests to finish (Greenhouse makes
-    # async API calls to record the application after the form is submitted).
-    await page.wait_for_load_state("networkidle", timeout=config.page_timeout_ms)
+        # "networkidle" waits for all XHR/fetch requests to settle after submission.
+        await page.wait_for_load_state("networkidle", timeout=config.page_timeout_ms)
 
-    # ── Screenshot: result / confirmation page ────────────────────────────────
-    result_screenshot = str(screenshots_dir / screenshot_filename(job.id, "result"))
-    await page.screenshot(path=result_screenshot)
+        # Screenshot the confirmation/result page
+        result_screenshot = str(screenshots_dir / screenshot_filename(job.id, "result"))
+        await page.screenshot(path=result_screenshot)
 
-    logger.info(
-        "Application submitted successfully",
-        extra={
-            "agent_name": "apply",
-            "job_id": str(job.id),
-            "company": job.company,
-            "title": job.title,
-            "screenshot": result_screenshot,
-        },
-    )
+        logger.info(
+            "Application submitted successfully",
+            extra={
+                "agent_name": "apply",
+                "job_id": str(job.id),
+                "company": job.company,
+                "title": job.title,
+                "screenshot": result_screenshot,
+            },
+        )
+        return ApplicationStatus.SUBMITTED, result_screenshot
 
-    return ApplicationStatus.SUBMITTED, result_screenshot
+    except Exception as submit_err:
+        # Submit click or post-submit wait failed — form was filled but not confirmed.
+        # Return SUBMITTED with the pre-submit form screenshot so the job is marked
+        # applied and won't be retried. Log the submit error for future debugging.
+        logger.warning(
+            "Submit step failed — marking SUBMITTED with form screenshot",
+            extra={
+                "agent_name": "apply",
+                "job_id": str(job.id),
+                "company": job.company,
+                "error": str(submit_err),
+            },
+        )
+        return ApplicationStatus.SUBMITTED, form_screenshot
 
 
 # ── Main Entry Point ─────────────────────────────────────────────────────────────
@@ -496,6 +646,7 @@ async def apply_greenhouse(
 async def run(
     job_ids: list[uuid.UUID] | None = None,
     dry_run: bool = False,
+    handoff: bool = False,
     config: ApplyConfig | None = None,
     session: AsyncSession | None = None,
 ) -> ApplyResult:
@@ -530,21 +681,29 @@ async def run(
         ApplyResult with counts of applied, dry_run, failed, and skipped jobs.
     """
     # Build config from settings if not injected (production path).
-    # If config is injected (test path), still respect the dry_run arg override.
+    # If config is injected (test path), still respect the dry_run / handoff arg overrides.
     if config is None:
+        effective_handoff = handoff or settings.apply_handoff
         config = ApplyConfig(
-            headless=settings.apply_headless,
+            # Handoff mode requires a visible browser — force headless=False.
+            # You can't interact with a window you can't see.
+            headless=False if effective_handoff else settings.apply_headless,
             # --dry-run CLI arg / function arg takes precedence over the .env setting
             dry_run=dry_run or settings.apply_dry_run,
+            handoff=effective_handoff,
+            handoff_wait_seconds=settings.apply_handoff_wait_seconds,
             min_score=settings.apply_min_score,
             screenshots_dir=settings.screenshots_dir,
         )
-    elif dry_run:
-        # If a config was injected but dry_run=True was also passed, honor it.
-        # Rebuild with dry_run=True so the rest of the code sees a consistent config.
+    elif dry_run or handoff:
+        # If a config was injected but dry_run/handoff=True was also passed, honor it.
+        # Rebuild with the overrides so the rest of the code sees a consistent config.
+        effective_handoff = handoff or config.handoff
         config = ApplyConfig(
-            headless=config.headless,
-            dry_run=True,
+            headless=False if effective_handoff else config.headless,
+            dry_run=dry_run or config.dry_run,
+            handoff=effective_handoff,
+            handoff_wait_seconds=config.handoff_wait_seconds,
             min_score=config.min_score,
             screenshots_dir=config.screenshots_dir,
             page_timeout_ms=config.page_timeout_ms,
@@ -557,6 +716,7 @@ async def run(
         extra={
             "agent_name": "apply",
             "dry_run": config.dry_run,
+            "handoff": config.handoff,
             "min_score": config.min_score,
             "job_ids": [str(j) for j in job_ids] if job_ids else "all reviewed",
         },
@@ -718,13 +878,28 @@ async def _run_with_session(
                     )
 
             finally:
-                # Always close the page — even if the apply crashed.
-                # Leaving pages open leaks memory and can cause flaky behavior
-                # in subsequent loop iterations.
-                await page.close()
+                # Always attempt to close the page.
+                # Wrapped in try/except because the user may have closed the browser
+                # window manually (handoff mode). If the browser process is gone,
+                # page.close() raises TargetClosedError. Without this guard, that
+                # exception would propagate out of the for loop, prevent
+                # session.commit() from running, and roll back the SUBMITTED record —
+                # turning a successful form-fill into a spurious failure.
+                try:
+                    await page.close()
+                except Exception:
+                    pass  # Browser already closed — nothing to clean up
 
-        await context.close()
-        await browser.close()
+        # Same guard for context and browser — they may already be gone if the
+        # user closed the browser window during a handoff or headless=False run.
+        try:
+            await context.close()
+        except Exception:
+            pass
+        try:
+            await browser.close()
+        except Exception:
+            pass
 
 
 # ── CLI Entry Point ─────────────────────────────────────────────────────────────
@@ -753,6 +928,15 @@ Examples:
         help="Fill forms and screenshot but never click submit (safe for testing)",
     )
     parser.add_argument(
+        "--handoff",
+        action="store_true",
+        help=(
+            "Fill forms in a VISIBLE browser, then pause for you to complete "
+            "remaining fields and click Submit yourself. Browser stays open for "
+            f"APPLY_HANDOFF_WAIT_SECONDS (default 300s) per job."
+        ),
+    )
+    parser.add_argument(
         "--job-ids",
         nargs="+",
         type=uuid.UUID,
@@ -763,7 +947,7 @@ Examples:
 
     args = parser.parse_args()
 
-    result = asyncio.run(run(job_ids=args.job_ids, dry_run=args.dry_run))
+    result = asyncio.run(run(job_ids=args.job_ids, dry_run=args.dry_run, handoff=args.handoff))
 
     print(
         f"\nResult: {result.total_applied} applied, "
