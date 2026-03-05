@@ -7,52 +7,70 @@
 
 ## Project Summary
 
-JobHunter AI is a pipeline-based job hunting system that scrapes SWE listings, scores them against a resume using Claude AI, and surfaces matches in a React dashboard. The eventual goal is a fully autonomous multi-agent system that can apply to jobs without human intervention. Each "agent" today is a well-structured script with a single responsibility — they will become the tools of a real LLM-driven orchestrator in Phase 4.
+JobHunter AI is a fully autonomous multi-agent system that scrapes SWE listings, scores them against a resume using Claude AI, and applies to the best matches — with a human-in-the-loop approval gate before anything gets submitted. The Orchestrator (Phase 4) is a real Claude tool-use agent that manages the full pipeline end-to-end.
 
 ---
 
 ## Important Concept: "Agents" vs Real Agents
 
-The scripts in `backend/agents/` are called agents because they have single responsibilities and clean `run()` entry points — but they are NOT yet AI agents in the LangChain/agentic sense. They follow fixed, deterministic sequences:
+The scripts in `backend/agents/` follow the **functional core / imperative shell** pattern:
+- `*_logic.py` — pure functions, zero I/O, fully unit-testable
+- `*.py` — orchestration, all side effects (DB, HTTP, browser, Claude API)
 
-- `scraper.py` — HTTP calls → filter → DB write. No AI, no decisions.
-- `resume_match.py` — fetch jobs → call Claude → store score. Claude scores text; it doesn't make decisions about what to do next.
-
-A real AI agent would receive a goal, decide which tools to call, observe the results, and adapt. That's Phase 4 (Orchestrator). For now, these are scripts with good architecture that will become the tools a real agent uses.
+The **Orchestrator** (`orchestrator.py`) is the only true AI agent — it uses Claude tool-use to decide what to call, observe results, and adapt. The other agents (scraper, resume_match, apply) are deterministic scripts that the Orchestrator uses as tools.
 
 ---
 
 ## Current Phase
 
-**Phase 4 — Orchestrator** — mostly complete, one UI item pending
+**Phase 4 — Orchestrator ✅ COMPLETE. Merged to main.**
 
 ### Where we left off (end of session)
-- Phase 4 Orchestrator is built and live-tested (281 passing tests)
-- Real Anthropic tool-use agent loop with 6 tools: check_db_state, scrape_jobs, score_jobs, auto_review_jobs, get_reviewed_jobs, request_apply_approval
-- Human-in-the-loop approval gate: agent pauses at `request_apply_approval`, waits for POST /approve/{id}
-- Session state stored in `orchestrator_sessions` DB table (survives server restarts)
-- API: POST /run, GET /status/{id} (poll every 2s), POST /approve/{id}, GET /history
-- Frontend: OrchestratorPage.jsx with 4 states (idle → running → waiting → done)
-- Mode selector: "Fresh Scan" (full pipeline) vs "Use Reviewed" (existing reviewed jobs only)
-- Handoff mode: fills forms in visible browser, pauses 5min for user to submit manually
-- Job dismissal in approval panel: X button removes individual jobs before approving
-- max_apply cap: limits how many jobs get auto-reviewed and sent to approval (default 5)
-- Dry run mode: all tools return mock data, safe for testing the full loop
 
-### Pending — finish next session
-1. **Add `max_apply` number input to OrchestratorPage.jsx** (the last in-progress task)
-   - `orchMaxApply` state was added to `App.jsx` and the prop is passed to `OrchestratorPage`
-   - Still need to: add `maxApply`/`setMaxApply` to `OrchestratorPage` props destructuring
-   - Add a number input (1–10) in the idle state UI, between mode selector and goal textarea
-   - Pass `maxApply` in the `startOrchestrator(goal, dryRun, mode, handoff, maxApply)` call in `handleStart`
-   - Reset to 5 in `handleNewSession`
-   - Run `pytest tests/ -v` to confirm 281 tests still pass, then commit
+Everything is complete and stable. 281 passing tests. Merged to main.
+
+**What was built and polished this session:**
+- max_apply number input (1–10) added to OrchestratorPage.jsx ✅
+- Fresh scan PATH decision tree fixed (strict if/elif priority: B→A→C→D→stop) ✅
+- Soft-deleted jobs now filtered in `_get_db_state` and `_get_reviewed_jobs` ✅
+- Per-tool exception handling in `_run_loop` — errors return to Claude instead of crashing ✅
+- Fixed wrong `ScraperResult`/`MatchResult` attribute names in `_execute_tool` ✅
+- Apply Agent: browser close no longer rolls back DB commit (try/except on cleanup) ✅
+- Apply Agent: form filled + screenshot = SUBMITTED (no confirmation page required) ✅
+- Apply Agent: handoff exits immediately when browser closed (`asyncio.wait` race) ✅
+- Apply Agent: `asyncio.CancelledError` now caught correctly (`except BaseException`) ✅
+- Jobs dashboard: Applied + Failed filter tabs ✅
+- Jobs dashboard: expandable cards (full reasoning, metadata, source URL) ✅
+- Status polling interval: 2s → 5s ✅
+- README, DESIGN.md, CLAUDE.md all updated ✅
+
+### Next session — Phase 5: Smarter Apply Agent
+
+The Orchestrator is done. The biggest remaining gap is the Apply Agent's form-filling intelligence. Current approach is hardcoded selectors for Greenhouse's standard fields. Plan:
+
+1. **DOM extraction → Claude → execute**
+   - Read all form fields from the page (labels, input types, options, dropdowns)
+   - Pass DOM snapshot + user profile to Claude
+   - Claude returns fill instructions for every field including custom questions
+   - This handles: custom text questions, dropdowns, checkboxes, multi-selects
+
+2. **EEOC / demographic fields**
+   - Add EEOC fields to `UserProfile` (ethnicity, gender, veteran status, disability)
+   - Auto-fill on apply; user configures in Settings
+
+3. **Multi-page form handling**
+   - Detect "Next" buttons, paginate through all form steps before submitting
+
+4. **Lever support**
+   - Extend Apply Agent to handle Lever application forms (currently Greenhouse only)
+
+**Start next session by reading:** `backend/agents/apply.py` and `backend/agents/apply_logic.py` to understand current form-filling approach before adding DOM extraction.
 
 ---
 
 ## Phase History
 
-### Phase 4 — Orchestrator ✅ COMPLETE (one UI item still pending — see above)
+### Phase 4 — Orchestrator ✅ COMPLETE
 
 - `backend/agents/orchestrator_logic.py` — Pure functions: `OrchestratorConfig`, `OrchestratorResult`, `build_tool_definitions` (6 tools), `build_system_prompt`, `parse_tool_calls`, `build_tool_result_message`
 - `backend/agents/orchestrator.py` — Agent loop: `run()`, `resume()`, `_run_loop()`, `_execute_tool()`, `ApprovalGateTriggered` exception, `_get_db_state()`, `_get_reviewed_jobs()`, `_auto_review_jobs()`
@@ -60,12 +78,12 @@ A real AI agent would receive a goal, decide which tools to call, observe the re
 - `backend/api/routes/orchestrator.py` — POST /run, GET /status/{id}, POST /approve/{id}, GET /history
 - `backend/core/database.py` — Added `get_db_context()` async context manager for use outside FastAPI routes
 - `backend/core/config.py` — Settings: `orchestrator_model`, `orchestrator_max_turns`, `orchestrator_max_tokens`, `orchestrator_dry_run`, `apply_handoff`, `apply_handoff_wait_seconds`
-- `frontend/src/pages/OrchestratorPage.jsx` — 4-state UI: idle/running/waiting/done, live reasoning log, approval panel with job dismissal, mode selector, handoff + dry run toggles
+- `frontend/src/pages/OrchestratorPage.jsx` — 4-state UI: idle/running/waiting/done, live reasoning log, approval panel with job dismissal, mode selector, handoff + dry run toggles, max_apply cap (1–10)
 - `frontend/src/App.jsx` — Orchestrator state lifted here (orchSessionId, orchSessionData, orchDryRun, orchMode, orchHandoff, orchMaxApply) so it survives tab navigation
 - **281 total passing tests**
 
 **Key design decisions:**
-- Functional core / imperative shell pattern (same as all other agents) — `orchestrator_logic.py` zero I/O
+- Functional core / imperative shell pattern — `orchestrator_logic.py` zero I/O
 - `ApprovalGateTriggered` exception exits the loop cleanly on approval gate — no threading flags through layers
 - Two-phase loop: `run()` stops at approval gate, `resume()` runs apply after human approves
 - Session persisted to DB immediately — approval gate survives server restarts
@@ -73,9 +91,10 @@ A real AI agent would receive a goal, decide which tools to call, observe the re
 - Dry run mode: all 6 tools return plausible mock data, safe for UI testing
 - `asyncio.to_thread()` wraps synchronous Anthropic SDK calls (same pattern as resume_match.py)
 - In-memory `_sessions` dict caches active state for fast polling; DB is source of truth
-- Handoff mode: sets headless=False, fills form, sleeps `handoff_wait_seconds`, returns SUBMITTED (user submits manually during the sleep window)
-- Mode "fresh_scan" follows adaptive PATH A/B/C workflow; "use_reviewed" skips scrape/score entirely
-- System prompt uses "call each tool at most ONCE" + explicit PATH A/B/C to prevent the agent looping
+- Handoff mode: `asyncio.wait()` races `page.wait_for_url()` vs `page.wait_for_event("close")` — exits immediately when user submits or closes browser
+- Fresh scan uses strict priority PATH: B (total==0) → A (new>0) → C (scored>0) → D (reviewed>0) → stop
+- `_get_db_state` filters `deleted_at.is_(None)` — soft-deleted jobs excluded from all counts
+- Per-tool exception handling: non-gate exceptions return `{"error": str(exc), "success": False}` to Claude instead of crashing the session
 
 ---
 
