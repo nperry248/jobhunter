@@ -22,28 +22,51 @@
 
 import { useState } from "react";
 import { Sidebar } from "./components/Sidebar";
-import { JobsPage } from "./pages/JobsPage";
 import { ApplicationsPage } from "./pages/ApplicationsPage";
+import { JobsPage } from "./pages/JobsPage";
+import { OrchestratorPage } from "./pages/OrchestratorPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
-// Maps page IDs to their component. Add new pages here.
-// WHY a map instead of if/else: cleaner, easier to extend, no long chains of conditions.
-const PAGES = {
-  jobs: <JobsPage />,
-  applications: <ApplicationsPage />,
-  settings: <SettingsPage />,
-};
-
 function App() {
-  // activePage controls which page component is shown in the main content area.
-  // "jobs" is the default — what you see when you first open the app.
   const [activePage, setActivePage] = useState("jobs");
+
+  // ── Orchestrator session state (lifted here so it survives tab switches) ────
+  // CONCEPT — Lifting state up:
+  //   React destroys a component's local state when it unmounts (navigating away).
+  //   By keeping sessionId and sessionData here in App — which never unmounts —
+  //   the orchestrator session stays alive while you browse other tabs.
+  //   OrchestratorPage receives these as props and resumes polling on remount.
+  const [orchSessionId, setOrchSessionId] = useState(null);
+  const [orchSessionData, setOrchSessionData] = useState(null);
+  const [orchDryRun, setOrchDryRun] = useState(false);
+  const [orchMode, setOrchMode] = useState("fresh_scan");
+  const [orchHandoff, setOrchHandoff] = useState(false);
+  const [orchMaxApply, setOrchMaxApply] = useState(5);
 
   return (
     <div className="flex min-h-screen bg-[#0a0a0a]">
       <Sidebar activePage={activePage} onNavigate={setActivePage} />
       <main className="flex-1 min-h-screen">
-        {PAGES[activePage] ?? (
+        {activePage === "jobs" && <JobsPage />}
+        {activePage === "applications" && <ApplicationsPage />}
+        {activePage === "orchestrator" && (
+          <OrchestratorPage
+            sessionId={orchSessionId}
+            setSessionId={setOrchSessionId}
+            sessionData={orchSessionData}
+            setSessionData={setOrchSessionData}
+            dryRun={orchDryRun}
+            setDryRun={setOrchDryRun}
+            mode={orchMode}
+            setMode={setOrchMode}
+            handoff={orchHandoff}
+            setHandoff={setOrchHandoff}
+            maxApply={orchMaxApply}
+            setMaxApply={setOrchMaxApply}
+          />
+        )}
+        {activePage === "settings" && <SettingsPage />}
+        {!["jobs", "applications", "orchestrator", "settings"].includes(activePage) && (
           <div className="p-8 text-zinc-500 text-sm">Page not found.</div>
         )}
       </main>

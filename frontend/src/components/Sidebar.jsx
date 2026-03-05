@@ -33,6 +33,14 @@ const Icons = {
       <line x1="9" y1="17" x2="13" y2="17" />
     </svg>
   ),
+  orchestrator: (
+    // Simple "circuit / AI" icon — two nodes connected through a center
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+      <path d="M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+    </svg>
+  ),
   settings: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3" />
@@ -71,6 +79,7 @@ export function Sidebar({ activePage, onNavigate }) {
   const navItems = [
     { id: "jobs", icon: Icons.jobs, label: "Jobs" },
     { id: "applications", icon: Icons.applications, label: "Applications" },
+    { id: "orchestrator", icon: Icons.orchestrator, label: "Orchestrator" },
     { id: "settings", icon: Icons.settings, label: "Settings" },
   ];
 

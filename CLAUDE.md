@@ -24,19 +24,60 @@ A real AI agent would receive a goal, decide which tools to call, observe the re
 
 ## Current Phase
 
-**Phase 4 — Orchestrator** ← UP NEXT
+**Phase 4 — Orchestrator** — mostly complete, one UI item pending
 
 ### Where we left off (end of session)
-- Phase 3C Apply Agent is built and tested (248 passing tests)
-- Live tested against real Greenhouse job postings — core fields fill correctly
-- Known limitation: custom questions, dropdowns, EEOC fields not yet handled
-- Decision: move to Phase 4 (Orchestrator) before investing in smarter form-filling
-- Smarter form-filling (DOM extraction → Claude → execute) is planned but deferred
-  until Phase 4 exists and real failure data shows which patterns matter most
+- Phase 4 Orchestrator is built and live-tested (281 passing tests)
+- Real Anthropic tool-use agent loop with 6 tools: check_db_state, scrape_jobs, score_jobs, auto_review_jobs, get_reviewed_jobs, request_apply_approval
+- Human-in-the-loop approval gate: agent pauses at `request_apply_approval`, waits for POST /approve/{id}
+- Session state stored in `orchestrator_sessions` DB table (survives server restarts)
+- API: POST /run, GET /status/{id} (poll every 2s), POST /approve/{id}, GET /history
+- Frontend: OrchestratorPage.jsx with 4 states (idle → running → waiting → done)
+- Mode selector: "Fresh Scan" (full pipeline) vs "Use Reviewed" (existing reviewed jobs only)
+- Handoff mode: fills forms in visible browser, pauses 5min for user to submit manually
+- Job dismissal in approval panel: X button removes individual jobs before approving
+- max_apply cap: limits how many jobs get auto-reviewed and sent to approval (default 5)
+- Dry run mode: all tools return mock data, safe for testing the full loop
+
+### Pending — finish next session
+1. **Add `max_apply` number input to OrchestratorPage.jsx** (the last in-progress task)
+   - `orchMaxApply` state was added to `App.jsx` and the prop is passed to `OrchestratorPage`
+   - Still need to: add `maxApply`/`setMaxApply` to `OrchestratorPage` props destructuring
+   - Add a number input (1–10) in the idle state UI, between mode selector and goal textarea
+   - Pass `maxApply` in the `startOrchestrator(goal, dryRun, mode, handoff, maxApply)` call in `handleStart`
+   - Reset to 5 in `handleNewSession`
+   - Run `pytest tests/ -v` to confirm 281 tests still pass, then commit
 
 ---
 
 ## Phase History
+
+### Phase 4 — Orchestrator ✅ COMPLETE (one UI item still pending — see above)
+
+- `backend/agents/orchestrator_logic.py` — Pure functions: `OrchestratorConfig`, `OrchestratorResult`, `build_tool_definitions` (6 tools), `build_system_prompt`, `parse_tool_calls`, `build_tool_result_message`
+- `backend/agents/orchestrator.py` — Agent loop: `run()`, `resume()`, `_run_loop()`, `_execute_tool()`, `ApprovalGateTriggered` exception, `_get_db_state()`, `_get_reviewed_jobs()`, `_auto_review_jobs()`
+- `backend/models/orchestrator_session.py` — `OrchestratorSession` model, `SessionStatus` enum (running/waiting_for_approval/complete/failed)
+- `backend/api/routes/orchestrator.py` — POST /run, GET /status/{id}, POST /approve/{id}, GET /history
+- `backend/core/database.py` — Added `get_db_context()` async context manager for use outside FastAPI routes
+- `backend/core/config.py` — Settings: `orchestrator_model`, `orchestrator_max_turns`, `orchestrator_max_tokens`, `orchestrator_dry_run`, `apply_handoff`, `apply_handoff_wait_seconds`
+- `frontend/src/pages/OrchestratorPage.jsx` — 4-state UI: idle/running/waiting/done, live reasoning log, approval panel with job dismissal, mode selector, handoff + dry run toggles
+- `frontend/src/App.jsx` — Orchestrator state lifted here (orchSessionId, orchSessionData, orchDryRun, orchMode, orchHandoff, orchMaxApply) so it survives tab navigation
+- **281 total passing tests**
+
+**Key design decisions:**
+- Functional core / imperative shell pattern (same as all other agents) — `orchestrator_logic.py` zero I/O
+- `ApprovalGateTriggered` exception exits the loop cleanly on approval gate — no threading flags through layers
+- Two-phase loop: `run()` stops at approval gate, `resume()` runs apply after human approves
+- Session persisted to DB immediately — approval gate survives server restarts
+- `auto_review_jobs` tool uses subquery pattern for ORDER BY + LIMIT (PostgreSQL doesn't support LIMIT in plain UPDATE)
+- Dry run mode: all 6 tools return plausible mock data, safe for UI testing
+- `asyncio.to_thread()` wraps synchronous Anthropic SDK calls (same pattern as resume_match.py)
+- In-memory `_sessions` dict caches active state for fast polling; DB is source of truth
+- Handoff mode: sets headless=False, fills form, sleeps `handoff_wait_seconds`, returns SUBMITTED (user submits manually during the sleep window)
+- Mode "fresh_scan" follows adaptive PATH A/B/C workflow; "use_reviewed" skips scrape/score entirely
+- System prompt uses "call each tool at most ONCE" + explicit PATH A/B/C to prevent the agent looping
+
+---
 
 ### Phase 1 — Foundation ✅ COMPLETE
 
@@ -143,40 +184,19 @@ python -m agents.apply --job-ids <uuid1> <uuid2>
 
 ---
 
-## What's Next — Phase 4: Orchestrator
+## What's Next — Phase 5: Apply Agent improvements
 
-The Orchestrator is what turns this from a collection of scripts into an autonomous system. It's a real LLM agent (using Anthropic tool-use) that receives a high-level goal, decides which agents to invoke, observes results, and adapts.
+Phase 4 Orchestrator is complete. Remaining work:
 
-**Core idea:** The three existing agents (`scraper`, `resume_match`, `apply`) become **tools** the Orchestrator calls. Instead of running them manually or on a fixed schedule, the Orchestrator decides when and what to run based on current DB state and goals.
-
-**What to build:**
-
-1. `backend/agents/orchestrator.py` — the agent loop
-   - Uses Anthropic tool-use (function calling) to expose scraper/scorer/apply as tools
-   - Receives a goal: `"Find and apply to 5 good SWE jobs this week"`
-   - Observes state: checks DB for new jobs, scored jobs, pending applications
-   - Decides: run scraper? score unscored? apply to reviewed?
-   - Handles failures: if apply fails on 3 jobs, tries a different strategy
-
-2. `backend/api/routes/orchestrator.py` — API to trigger and monitor
-   - `POST /api/v1/orchestrator/run` — start an orchestrator session
-   - `GET /api/v1/orchestrator/status` — poll progress, see agent's reasoning
-   - `GET /api/v1/orchestrator/history` — past sessions + outcomes
-
-3. Frontend: Orchestrator panel in dashboard
-   - Start/stop button
-   - Live reasoning log (what the agent is thinking)
-   - Summary: "Applied to 3 jobs, skipped 2 (below threshold), 1 failed"
-
-**Key design decisions to make:**
-- Tool-use (Anthropic function calling) vs LangChain — lean toward raw Anthropic SDK, keeps dependency count low
-- How much autonomy: fully autonomous vs human-in-the-loop before each apply
-- State management: session stored in DB or Redis?
-
-**Apply Agent improvements (deferred from Phase 3C, do after Orchestrator works):**
+**Apply Agent improvements (deferred from Phase 3C):**
 - DOM extraction → Claude → execute: read all form fields from the page, pass to Claude with profile, Claude returns fill instructions for every field including custom questions and dropdowns
 - EEOC/demographic fields: add to UserProfile, auto-fill
 - Multi-page form handling
+
+**Orchestrator improvements:**
+- Better error recovery: if scraper fails, try again with a subset of companies
+- LLM-graded summaries: have Claude synthesize a session outcome narrative
+- Session history UI on OrchestratorPage (list of past sessions with outcomes)
 
 ---
 
@@ -251,13 +271,16 @@ job-agent/
 │   │   ├── resume_match.py         # Resume scoring orchestration
 │   │   ├── resume_match_logic.py   # Pure scoring functions
 │   │   ├── apply.py                # Playwright form-filler orchestration
-│   │   └── apply_logic.py          # Pure apply functions (name split, screenshots, etc.)
+│   │   ├── apply_logic.py          # Pure apply functions (name split, screenshots, etc.)
+│   │   ├── orchestrator.py         # Orchestrator agent loop (tool-use, approval gate)
+│   │   └── orchestrator_logic.py   # Pure functions: tool defs, prompt building, response parsing
 │   ├── api/
 │   │   ├── main.py                 # FastAPI app, CORS, routers
 │   │   └── routes/
 │   │       ├── jobs.py             # GET /jobs, PATCH /jobs/{id}, DELETE /jobs
 │   │       ├── profile.py          # GET /profile, PUT /profile
-│   │       └── pipeline.py         # POST /pipeline/run, GET /pipeline/status
+│   │       ├── pipeline.py         # POST /pipeline/run, GET /pipeline/status
+│   │       └── orchestrator.py     # POST /run, GET /status/{id}, POST /approve/{id}, GET /history
 │   ├── workers/
 │   │   ├── celery_app.py           # Celery app instance + config
 │   │   ├── tasks.py                # scrape_task, score_task, scrape_and_score_task
@@ -269,7 +292,8 @@ job-agent/
 │   ├── models/
 │   │   ├── job.py                  # Job (title, company, score, status)
 │   │   ├── application.py          # Application (job_id, status, screenshot)
-│   │   └── user_profile.py         # Resume path, personal info for Apply Agent
+│   │   ├── user_profile.py         # Resume path, personal info for Apply Agent
+│   │   └── orchestrator_session.py # Orchestrator session (goal, steps, status, pending_job_ids)
 │   ├── services/
 │   │   └── resume_parser.py        # PDF → text, HTML stripping
 │   ├── tests/
@@ -282,7 +306,7 @@ job-agent/
 │       ├── pages/
 │       │   ├── JobsPage.jsx        # Main dashboard (filter, score badges, Run Now, Clear All)
 │       │   └── SettingsPage.jsx    # User profile form (personal info, preferences, toggles)
-│       └── api/client.js           # getJobs, updateJobStatus, clearAllJobs, runPipeline, getPipelineStatus, getProfile, updateProfile
+│       └── api/client.js           # getJobs, updateJobStatus, clearAllJobs, runPipeline, getPipelineStatus, getProfile, updateProfile, startOrchestrator, getOrchestratorStatus, approveOrchestrator, getOrchestratorHistory
 ├── data/
 │   └── resumes/                    # Resume PDFs (gitignored)
 ├── assets/                         # Static assets (screenshots for README etc.)
@@ -334,7 +358,7 @@ job-agent/
 - [x] Branch strategy → `dev` for all work, merge to `main` when phase is complete
 - [x] Apply Agent scope → Greenhouse only for v1; iframe-embedded forms handled
 - [x] Apply Agent form-filling → hardcoded required fields for now; LLM form-filling deferred to post-Phase-4
-- [ ] Orchestration approach — simple Celery schedule, or real LLM agent with tool use? (Phase 4 decision — leaning toward Anthropic tool-use)
+- [x] Orchestration approach → raw Anthropic tool-use (not LangChain) — fewer dependencies, easier to understand, full control over the loop
 
 ---
 
