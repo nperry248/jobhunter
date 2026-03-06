@@ -26,10 +26,18 @@ import { getProfile, updateProfile } from "../api/client";
 
 function Section({ title, description, children }) {
   return (
-    <div className="border border-white/[0.06] rounded-lg p-6">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-white">{title}</h3>
-        {description && <p className="text-zinc-500 text-xs mt-0.5">{description}</p>}
+    <div
+      className="rounded-lg p-6"
+      style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-elevated)' }}
+    >
+      <div className="mb-5">
+        {/* Section title uses monospace label style — consistent with the rest of the UI */}
+        <p className="font-mono text-[10px] tracking-widest uppercase mb-1" style={{ color: '#334155' }}>
+          {title}
+        </p>
+        {description && (
+          <p className="text-xs" style={{ color: '#475569' }}>{description}</p>
+        )}
       </div>
       <div className="space-y-4">
         {children}
@@ -39,19 +47,25 @@ function Section({ title, description, children }) {
 }
 
 
-// ── Field components ──────────────────────────────────────────────────────────
+// ── Field label wrapper ───────────────────────────────────────────────────────
 
 function Field({ label, hint, children }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+      <label className="block text-xs font-medium mb-1.5" style={{ color: '#64748b' }}>
         {label}
-        {hint && <span className="text-zinc-600 font-normal ml-1">— {hint}</span>}
+        {hint && (
+          <span className="font-mono text-[10px] tracking-wider ml-1.5" style={{ color: '#334155' }}>
+            — {hint}
+          </span>
+        )}
       </label>
       {children}
     </div>
   );
 }
+
+// ── Text input ─────────────────────────────────────────────────────────────────
 
 function Input({ value, onChange, placeholder, type = "text" }) {
   return (
@@ -60,32 +74,41 @@ function Input({ value, onChange, placeholder, type = "text" }) {
       value={value ?? ""}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full bg-white/[0.03] border border-white/[0.08] rounded-md px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-white/[0.2] transition-colors"
+      className="w-full rounded-md px-3 py-2.5 text-sm focus:outline-none transition-colors"
+      style={{
+        backgroundColor: 'var(--bg-input)',
+        border: '1px solid var(--border)',
+        color: 'var(--text-1)',
+      }}
+      onFocus={e => e.currentTarget.style.borderColor = 'var(--accent-border)'}
+      onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
     />
   );
 }
+
+// ── Toggle switch ─────────────────────────────────────────────────────────────
 
 function Toggle({ label, description, checked, onChange }) {
   return (
     <div className="flex items-center justify-between">
       <div>
-        <p className="text-sm text-zinc-300">{label}</p>
-        {description && <p className="text-xs text-zinc-600 mt-0.5">{description}</p>}
+        <p className="text-sm" style={{ color: 'var(--text-1)' }}>{label}</p>
+        {description && (
+          <p className="text-xs mt-0.5" style={{ color: '#475569' }}>{description}</p>
+        )}
       </div>
       <button
         type="button"
         onClick={() => onChange(!checked)}
-        className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
-          checked ? "bg-emerald-500/70" : "bg-white/[0.08]"
-        }`}
+        className="relative w-11 h-6 rounded-full transition-colors shrink-0 ml-4"
+        style={{ backgroundColor: checked ? '#a78bfa' : 'rgba(255,255,255,0.08)' }}
       >
         {/* Knob: left-0.5 anchors it 2px from the left edge when off.
             translate-x-5 (20px) shifts it right when on.
             Container is 44px, knob is 20px: 2px gap on both sides. */}
         <span
-          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-            checked ? "translate-x-5" : "translate-x-0"
-          }`}
+          className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform shadow-sm"
+          style={{ transform: checked ? 'translateX(20px)' : 'translateX(0)' }}
         />
       </button>
     </div>
@@ -100,7 +123,7 @@ export function SettingsPage() {
   // One object for all form fields. We update it with spread syntax:
   //   setForm(prev => ({ ...prev, email: "new@email.com" }))
   // This copies all existing fields and overwrites just the one that changed.
-  const [form, setForm]     = useState(null);  // null = not loaded yet
+  const [form, setForm]       = useState(null);  // null = not loaded yet
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const [saved, setSaved]     = useState(false);
@@ -147,16 +170,22 @@ export function SettingsPage() {
     return (
       <div className="p-8 max-w-2xl">
         <div className="mb-8">
-          <h2 className="text-lg font-semibold text-white">Settings</h2>
-          <p className="text-zinc-500 text-sm mt-0.5">Configure your profile and job preferences.</p>
+          <p className="font-mono text-[10px] tracking-[0.2em] uppercase mb-1" style={{ color: '#334155' }}>
+            Configuration
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>Settings</h1>
         </div>
         <div className="space-y-4">
           {[1, 2, 3].map(i => (
-            <div key={i} className="border border-white/[0.06] rounded-lg p-6 animate-pulse">
-              <div className="h-4 bg-white/[0.04] rounded w-1/4 mb-4" />
+            <div
+              key={i}
+              className="rounded-lg p-6 animate-pulse"
+              style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-elevated)' }}
+            >
+              <div className="h-3 rounded w-1/4 mb-5" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
               <div className="space-y-3">
-                <div className="h-8 bg-white/[0.04] rounded" />
-                <div className="h-8 bg-white/[0.04] rounded" />
+                <div className="h-9 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+                <div className="h-9 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
               </div>
             </div>
           ))}
@@ -168,10 +197,16 @@ export function SettingsPage() {
   if (error && !form) {
     return (
       <div className="p-8 max-w-2xl">
-        <div className="border border-red-500/20 bg-red-500/5 rounded-lg p-4">
-          <p className="text-red-400 text-sm font-medium">Failed to load profile</p>
-          <p className="text-red-500/70 text-xs mt-1">{error}</p>
-          <p className="text-zinc-600 text-xs mt-2">Is the backend running? <code className="text-zinc-500">uvicorn api.main:app --reload --port 8000</code></p>
+        <div
+          className="rounded-lg p-4"
+          style={{ border: '1px solid rgba(248,113,113,0.2)', backgroundColor: 'rgba(248,113,113,0.05)' }}
+        >
+          <p className="font-semibold text-sm mb-1" style={{ color: '#f87171' }}>Failed to load profile</p>
+          <p className="font-mono text-xs mb-2" style={{ color: '#f87171', opacity: 0.7 }}>{error}</p>
+          <p className="font-mono text-[10px]" style={{ color: '#475569' }}>
+            Is the backend running?{" "}
+            <code style={{ color: '#64748b' }}>uvicorn api.main:app --reload --port 8000</code>
+          </p>
         </div>
       </div>
     );
@@ -181,9 +216,14 @@ export function SettingsPage() {
   return (
     <div className="p-8 max-w-2xl">
 
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold text-white">Settings</h2>
-        <p className="text-zinc-500 text-sm mt-0.5">
+      <div className="mb-8">
+        <p className="font-mono text-[10px] tracking-[0.2em] uppercase mb-1" style={{ color: '#334155' }}>
+          Configuration
+        </p>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
+          Settings
+        </h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>
           Your profile is used by the Apply Agent to fill out job applications.
         </p>
       </div>
@@ -191,7 +231,7 @@ export function SettingsPage() {
       <form onSubmit={handleSave} className="space-y-4">
 
         {/* ── Personal Info ── */}
-        <Section title="Personal Info" description="Used to fill out application forms.">
+        <Section title="Personal Info" description="Used to fill out application forms automatically.">
           <div className="grid grid-cols-2 gap-4">
             <Field label="Full Name">
               <Input value={form.full_name} onChange={set("full_name")} placeholder="Nick Perry" />
@@ -232,9 +272,10 @@ export function SettingsPage() {
               placeholder="/Users/you/Desktop/job-agent/data/resumes/YourResume.pdf"
             />
           </Field>
-          <p className="text-zinc-700 text-xs">
-            Place your resume in <code className="text-zinc-500">data/resumes/</code> and paste the full path above.
-            The Resume Match Agent reads this file when scoring jobs.
+          <p className="font-mono text-[10px] tracking-wider" style={{ color: '#334155' }}>
+            Place your resume in{" "}
+            <code style={{ color: '#475569' }}>data/resumes/</code>
+            {" "}and paste the full path above. The Resume Match Agent reads this file when scoring jobs.
           </p>
         </Section>
 
@@ -267,12 +308,26 @@ export function SettingsPage() {
           <button
             type="submit"
             disabled={saving}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-white/[0.08] text-white hover:bg-white/[0.12] disabled:opacity-40 transition-colors"
+            className="px-5 py-2.5 rounded-lg text-sm font-semibold transition-all"
+            style={{
+              backgroundColor: '#a78bfa',
+              color: '#07090c',
+              opacity: saving ? 0.5 : 1,
+              cursor: saving ? 'not-allowed' : 'pointer',
+            }}
+            onMouseEnter={e => { if (!saving) e.currentTarget.style.backgroundColor = '#c4b5fd'; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#a78bfa'; }}
           >
             {saving ? "Saving…" : "Save Settings"}
           </button>
-          {saved && <span className="text-emerald-400 text-sm">Saved!</span>}
-          {error && <span className="text-red-400 text-sm">{error}</span>}
+          {saved && (
+            <span className="font-mono text-[10px] tracking-widest uppercase" style={{ color: '#34d399' }}>
+              SAVED
+            </span>
+          )}
+          {error && (
+            <span className="text-sm font-mono" style={{ color: '#f87171' }}>{error}</span>
+          )}
         </div>
 
       </form>

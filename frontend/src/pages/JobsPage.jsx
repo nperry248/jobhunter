@@ -35,35 +35,42 @@ const STATUS_FILTERS = [
 
 
 // ── Score Badge ───────────────────────────────────────────────────────────────
-// Returns a label + Tailwind class for a score value.
+// Returns a label + style for a score value.
 // Color encodes the score range so you can scan the list at a glance.
+// Using JetBrains Mono so scores read as precise data, not decorative text.
 
 function scoreBadge(score) {
   if (score === null || score === undefined) {
-    return { label: "—", className: "bg-zinc-800 text-zinc-500" };
+    return { label: "—", bg: "rgba(255,255,255,0.04)", color: "#475569", border: "rgba(255,255,255,0.06)" };
   }
-  if (score >= 90) return { label: Math.round(score), className: "bg-emerald-500/15 text-emerald-400" };
-  if (score >= 70) return { label: Math.round(score), className: "bg-blue-500/15 text-blue-400" };
-  if (score >= 50) return { label: Math.round(score), className: "bg-yellow-500/15 text-yellow-400" };
-  if (score >= 30) return { label: Math.round(score), className: "bg-orange-500/15 text-orange-400" };
-  return           { label: Math.round(score), className: "bg-red-500/15 text-red-400" };
+  const n = Math.round(score);
+  if (score >= 90) return { label: n, bg: "rgba(16,185,129,0.1)",  color: "#34d399", border: "rgba(16,185,129,0.2)"  };
+  if (score >= 70) return { label: n, bg: "rgba(99,179,237,0.1)",  color: "#60a5fa", border: "rgba(99,179,237,0.2)"  };
+  if (score >= 50) return { label: n, bg: "rgba(251,191,36,0.1)",  color: "#fbbf24", border: "rgba(251,191,36,0.2)"  };
+  if (score >= 30) return { label: n, bg: "rgba(251,146,60,0.1)",  color: "#fb923c", border: "rgba(251,146,60,0.2)"  };
+  return               { label: n, bg: "rgba(248,113,113,0.1)",  color: "#f87171", border: "rgba(248,113,113,0.2)"  };
 }
 
 
 // ── Status Pill ───────────────────────────────────────────────────────────────
+// Monospace font + compact pill — reads as a system status tag.
 
-const STATUS_STYLES = {
-  new:      "bg-zinc-700/50 text-zinc-400",
-  scored:   "bg-blue-500/10 text-blue-400",
-  reviewed: "bg-emerald-500/10 text-emerald-400",
-  ignored:  "bg-zinc-800 text-zinc-600",
-  applied:  "bg-purple-500/10 text-purple-400",
-  failed:   "bg-red-500/10 text-red-400",
+const STATUS_CONFIG = {
+  new:      { color: "#64748b", bg: "rgba(100,116,139,0.12)" },
+  scored:   { color: "#60a5fa", bg: "rgba(96,165,250,0.1)"  },
+  reviewed: { color: "#34d399", bg: "rgba(52,211,153,0.1)"  },
+  ignored:  { color: "#334155", bg: "rgba(51,65,85,0.3)"    },
+  applied:  { color: "#a78bfa", bg: "rgba(167,139,250,0.1)" },
+  failed:   { color: "#f87171", bg: "rgba(248,113,113,0.1)" },
 };
 
 function StatusPill({ status }) {
+  const cfg = STATUS_CONFIG[status] ?? { color: "#64748b", bg: "rgba(100,116,139,0.1)" };
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[status] ?? "bg-zinc-800 text-zinc-500"}`}>
+    <span
+      className="font-mono text-[10px] font-medium px-2 py-0.5 rounded tracking-widest uppercase"
+      style={{ color: cfg.color, backgroundColor: cfg.bg }}
+    >
       {status}
     </span>
   );
@@ -81,13 +88,25 @@ function JobCard({ job, onStatusChange }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className={`border border-white/[0.06] rounded-lg transition-opacity duration-200 ${job.status === "ignored" ? "opacity-40" : ""}`}>
-
+    <div
+      className={`rounded-lg transition-opacity duration-200 ${job.status === "ignored" ? "opacity-35" : ""}`}
+      style={{
+        backgroundColor: 'var(--bg-elevated)',
+        border: '1px solid var(--border)',
+      }}
+    >
       {/* ── Main row — always visible ── */}
       <div className="p-4 flex items-start gap-4">
 
-        {/* Score badge */}
-        <div className={`flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-sm font-semibold ${badge.className}`}>
+        {/* Score badge — monospace font makes the number feel like a data readout */}
+        <div
+          className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center font-mono text-sm font-semibold"
+          style={{
+            backgroundColor: badge.bg,
+            color: badge.color,
+            border: `1px solid ${badge.border}`,
+          }}
+        >
           {badge.label}
         </div>
 
@@ -97,31 +116,41 @@ function JobCard({ job, onStatusChange }) {
           className="flex-1 min-w-0 text-left"
         >
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-semibold text-white">{job.title}</h3>
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+              {job.title}
+            </h3>
             <StatusPill status={job.status} />
           </div>
 
-          <p className="text-zinc-400 text-sm mt-0.5">
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>
             {job.company}
-            {job.location && <span className="text-zinc-600"> · {job.location}</span>}
+            {job.location && (
+              <span className="font-mono text-xs ml-1.5" style={{ color: '#334155' }}>
+                / {job.location}
+              </span>
+            )}
           </p>
 
           {/* Reasoning preview — clamped to 2 lines when collapsed */}
           {job.match_reasoning && (
-            <p className="text-zinc-500 text-xs mt-1.5 line-clamp-2">{job.match_reasoning}</p>
+            <p className="text-xs mt-1.5 line-clamp-2 leading-relaxed" style={{ color: '#475569' }}>
+              {job.match_reasoning}
+            </p>
           )}
         </button>
 
         {/* Actions — stopPropagation so clicks don't toggle expand */}
-        <div className="flex-shrink-0 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+        <div className="shrink-0 flex items-center gap-2" onClick={e => e.stopPropagation()}>
 
           {/* Expand / collapse chevron */}
           <button
             onClick={() => setExpanded(e => !e)}
-            className="text-zinc-600 hover:text-zinc-400 transition-colors p-1"
+            className="p-1 transition-colors rounded"
+            style={{ color: '#334155' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#64748b'}
+            onMouseLeave={e => e.currentTarget.style.color = '#334155'}
             title={expanded ? "Collapse" : "Expand"}
           >
-            {/* Chevron rotates 180° when expanded */}
             <svg
               className={`w-4 h-4 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -135,9 +164,15 @@ function JobCard({ job, onStatusChange }) {
             href={job.source_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 rounded border border-white/[0.06] hover:border-white/[0.12]"
+            className="font-mono text-[10px] tracking-wider px-2.5 py-1.5 rounded transition-all"
+            style={{
+              color: '#64748b',
+              border: '1px solid var(--border)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-1)'; e.currentTarget.style.borderColor = 'var(--border-hover)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = 'var(--border)'; }}
           >
-            View ↗
+            VIEW ↗
           </a>
 
           {/* Scored: show Reviewed + Ignore buttons */}
@@ -145,15 +180,21 @@ function JobCard({ job, onStatusChange }) {
             <>
               <button
                 onClick={() => onStatusChange(job.id, "reviewed")}
-                className="text-xs text-zinc-400 hover:text-emerald-400 transition-colors px-2 py-1 rounded border border-white/[0.06] hover:border-emerald-500/30"
+                className="font-mono text-[10px] tracking-wider px-2.5 py-1.5 rounded transition-all"
+                style={{ color: '#34d399', border: '1px solid rgba(52,211,153,0.2)' }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(52,211,153,0.07)'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
-                Reviewed
+                APPROVE
               </button>
               <button
                 onClick={() => onStatusChange(job.id, "ignored")}
-                className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors px-2 py-1 rounded border border-white/[0.06]"
+                className="font-mono text-[10px] tracking-wider px-2.5 py-1.5 rounded transition-all"
+                style={{ color: '#475569', border: '1px solid var(--border)' }}
+                onMouseEnter={e => e.currentTarget.style.color = '#64748b'}
+                onMouseLeave={e => e.currentTarget.style.color = '#475569'}
               >
-                Ignore
+                SKIP
               </button>
             </>
           )}
@@ -162,9 +203,12 @@ function JobCard({ job, onStatusChange }) {
           {job.status === "reviewed" && (
             <button
               onClick={() => onStatusChange(job.id, "scored")}
-              className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors px-2 py-1 rounded border border-white/[0.06]"
+              className="font-mono text-[10px] tracking-wider px-2.5 py-1.5 rounded transition-all"
+              style={{ color: '#475569', border: '1px solid var(--border)' }}
+              onMouseEnter={e => e.currentTarget.style.color = '#64748b'}
+              onMouseLeave={e => e.currentTarget.style.color = '#475569'}
             >
-              Undo
+              UNDO
             </button>
           )}
         </div>
@@ -172,49 +216,56 @@ function JobCard({ job, onStatusChange }) {
 
       {/* ── Expanded detail panel ── */}
       {expanded && (
-        <div className="border-t border-white/[0.06] px-4 py-3 space-y-3">
+        <div style={{ borderTop: '1px solid var(--border)' }} className="px-4 py-3 space-y-3">
 
           {/* Full reasoning text (no clamp) */}
           {job.match_reasoning && (
             <div>
-              <p className="text-xs text-zinc-600 font-medium mb-1 uppercase tracking-wide">Match Reasoning</p>
-              <p className="text-zinc-400 text-xs leading-relaxed">{job.match_reasoning}</p>
+              <p className="font-mono text-[10px] tracking-widest uppercase mb-1.5" style={{ color: '#334155' }}>
+                Match Reasoning
+              </p>
+              <p className="text-xs leading-relaxed" style={{ color: '#64748b' }}>
+                {job.match_reasoning}
+              </p>
             </div>
           )}
 
           {/* Metadata row: source, dates */}
-          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
+          <div className="flex flex-wrap gap-x-6 gap-y-1">
             {job.source && (
-              <span className="text-zinc-600">
-                Source: <span className="text-zinc-400 capitalize">{job.source}</span>
+              <span className="font-mono text-[10px]" style={{ color: '#334155' }}>
+                SOURCE: <span style={{ color: '#64748b' }}>{job.source.toUpperCase()}</span>
               </span>
             )}
             {job.scraped_at && (
-              <span className="text-zinc-600">
-                Scraped: <span className="text-zinc-400">{new Date(job.scraped_at).toLocaleDateString()}</span>
+              <span className="font-mono text-[10px]" style={{ color: '#334155' }}>
+                SCRAPED: <span style={{ color: '#64748b' }}>{new Date(job.scraped_at).toLocaleDateString()}</span>
               </span>
             )}
             {job.scored_at && (
-              <span className="text-zinc-600">
-                Scored: <span className="text-zinc-400">{new Date(job.scored_at).toLocaleDateString()}</span>
+              <span className="font-mono text-[10px]" style={{ color: '#334155' }}>
+                SCORED: <span style={{ color: '#64748b' }}>{new Date(job.scored_at).toLocaleDateString()}</span>
               </span>
             )}
             {job.applied_at && (
-              <span className="text-zinc-600">
-                Applied: <span className="text-zinc-400">{new Date(job.applied_at).toLocaleDateString()}</span>
+              <span className="font-mono text-[10px]" style={{ color: '#334155' }}>
+                APPLIED: <span style={{ color: '#34d399' }}>{new Date(job.applied_at).toLocaleDateString()}</span>
               </span>
             )}
           </div>
 
           {/* Full URL */}
           {job.source_url && (
-            <p className="text-xs text-zinc-600 break-all">
-              <span className="mr-1">URL:</span>
+            <p className="font-mono text-[10px] break-all" style={{ color: '#334155' }}>
+              URL:{" "}
               <a
                 href={job.source_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-500/70 hover:text-blue-400 transition-colors"
+                className="transition-colors"
+                style={{ color: '#a78bfa' }}
+                onMouseEnter={e => e.currentTarget.style.color = '#c4b5fd'}
+                onMouseLeave={e => e.currentTarget.style.color = '#a78bfa'}
               >
                 {job.source_url}
               </a>
@@ -232,13 +283,16 @@ function JobCard({ job, onStatusChange }) {
 
 function SkeletonCard() {
   return (
-    <div className="border border-white/[0.06] rounded-lg p-4 animate-pulse">
+    <div
+      className="rounded-lg p-4 animate-pulse"
+      style={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+    >
       <div className="flex items-start gap-4">
-        <div className="w-12 h-12 rounded-lg bg-white/[0.04] flex-shrink-0" />
+        <div className="w-12 h-12 rounded-lg shrink-0" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
         <div className="flex-1 space-y-2 pt-1">
-          <div className="h-4 bg-white/[0.04] rounded w-1/3" />
-          <div className="h-3 bg-white/[0.04] rounded w-1/4" />
-          <div className="h-3 bg-white/[0.04] rounded w-2/3" />
+          <div className="h-4 rounded w-1/3" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+          <div className="h-3 rounded w-1/4" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+          <div className="h-3 rounded w-2/3" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
         </div>
       </div>
     </div>
@@ -329,21 +383,16 @@ export function JobsPage() {
   //   WebSocket or push notification when it finishes. Instead we poll
   //   GET /pipeline/status every 3 seconds until `running` goes false.
   //   When it does, we stop polling and refresh the jobs list.
-  //
-  //   useRef stores the interval ID so we can clear it from anywhere — if we
-  //   stored it in useState, clearing it would trigger a re-render.
 
   async function handleRunPipeline() {
     try {
       await runPipeline();
       setPipelineRunning(true);
 
-      // Start polling every 3 seconds
       pollRef.current = setInterval(async () => {
         try {
           const status = await getPipelineStatus();
           if (!status.running) {
-            // Pipeline finished — stop polling, store result, refresh jobs
             clearInterval(pollRef.current);
             pollRef.current = null;
             setPipelineRunning(false);
@@ -383,132 +432,183 @@ export function JobsPage() {
   return (
     <div className="p-8 max-w-4xl">
 
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      {/* ── Header ── */}
+      <div className="mb-8 flex items-start justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-white">Jobs</h2>
-          <p className="text-zinc-500 text-sm mt-0.5">
-            {loading ? "Loading…" : `${total} job${total !== 1 ? "s" : ""} found`}
+          {/* Section label in monospace — "terminal header" feel */}
+          <p className="font-mono text-[10px] tracking-[0.2em] uppercase mb-1" style={{ color: '#334155' }}>
+            Job Pipeline
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
+            Jobs
+          </h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>
+            {loading ? "Loading…" : `${total} listing${total !== 1 ? "s" : ""} found`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Run Now — triggers scrape + score pipeline, polls until done */}
+
+        {/* Action buttons — monospace, bordered, small */}
+        <div className="flex items-center gap-2 mt-1">
           <button
             onClick={handleRunPipeline}
             disabled={pipelineRunning}
-            className={`text-xs transition-colors px-3 py-1.5 rounded border ${
-              pipelineRunning
-                ? "text-blue-400 border-blue-500/30 cursor-not-allowed"
-                : "text-zinc-400 hover:text-blue-400 border-white/[0.06] hover:border-blue-500/30"
-            }`}
+            className="font-mono text-[10px] tracking-wider px-3 py-2 rounded transition-all flex items-center gap-2"
+            style={{
+              border: pipelineRunning ? '1px solid rgba(96,165,250,0.3)' : '1px solid var(--border)',
+              color: pipelineRunning ? '#60a5fa' : '#64748b',
+              cursor: pipelineRunning ? 'not-allowed' : 'pointer',
+            }}
           >
             {pipelineRunning ? (
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                Running…
-              </span>
-            ) : "Run Now"}
+              <>
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                RUNNING
+              </>
+            ) : "RUN NOW"}
           </button>
+
           <button
             onClick={fetchJobs}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-3 py-1.5 rounded border border-white/[0.06] hover:border-white/[0.12]"
+            className="font-mono text-[10px] tracking-wider px-3 py-2 rounded transition-all"
+            style={{ border: '1px solid var(--border)', color: '#64748b' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
+            onMouseLeave={e => e.currentTarget.style.color = '#64748b'}
           >
-            Refresh
+            REFRESH
           </button>
+
           {!confirmClear ? (
             <button
               onClick={() => setConfirmClear(true)}
-              className="text-xs text-zinc-600 hover:text-red-400 transition-colors px-3 py-1.5 rounded border border-white/[0.06] hover:border-red-500/30"
+              className="font-mono text-[10px] tracking-wider px-3 py-2 rounded transition-all"
+              style={{ border: '1px solid var(--border)', color: '#334155' }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.3)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = '#334155'; e.currentTarget.style.borderColor = 'var(--border)'; }}
             >
-              Clear All
+              CLEAR ALL
             </button>
           ) : (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-red-500/30 bg-red-500/5">
-              <span className="text-xs text-red-400">Delete all jobs?</span>
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded"
+              style={{ border: '1px solid rgba(248,113,113,0.3)', backgroundColor: 'rgba(248,113,113,0.05)' }}
+            >
+              <span className="font-mono text-[10px] tracking-wider" style={{ color: '#f87171' }}>DELETE ALL?</span>
               <button
                 onClick={handleClearAll}
                 disabled={clearing}
-                className="text-xs text-red-400 hover:text-red-300 font-medium disabled:opacity-50 transition-colors"
+                className="font-mono text-[10px] font-semibold tracking-wider transition-colors"
+                style={{ color: '#f87171' }}
               >
-                {clearing ? "Clearing…" : "Yes"}
+                {clearing ? "…" : "YES"}
               </button>
               <button
                 onClick={() => setConfirmClear(false)}
-                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                className="font-mono text-[10px] tracking-wider transition-colors"
+                style={{ color: '#64748b' }}
               >
-                Cancel
+                NO
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Pipeline Result Banner */}
+      {/* ── Pipeline Result Banner ── */}
       {pipelineResult && !pipelineRunning && (
-        <div className={`mb-4 px-4 py-3 rounded-lg border text-xs flex items-center justify-between ${
-          pipelineResult.error
-            ? "border-red-500/20 bg-red-500/5 text-red-400"
-            : "border-white/[0.06] bg-white/[0.02] text-zinc-400"
-        }`}>
+        <div
+          className="mb-5 px-4 py-3 rounded-lg flex items-center justify-between"
+          style={{
+            border: pipelineResult.error ? '1px solid rgba(248,113,113,0.2)' : '1px solid var(--border)',
+            backgroundColor: pipelineResult.error ? 'rgba(248,113,113,0.05)' : 'var(--bg-elevated)',
+          }}
+        >
           {pipelineResult.error ? (
-            <span>Pipeline error: {pipelineResult.error}</span>
+            <span className="font-mono text-xs" style={{ color: '#f87171' }}>
+              ERROR: {pipelineResult.error}
+            </span>
           ) : (
-            <span>
-              Last run: <span className="text-white">{pipelineResult.scrape?.total_new ?? 0} new jobs</span> scraped,{" "}
-              <span className="text-white">{pipelineResult.score?.total_scored ?? 0} scored</span>
+            <span className="font-mono text-xs" style={{ color: '#64748b' }}>
+              LAST RUN:{" "}
+              <span style={{ color: 'var(--text-1)' }}>{pipelineResult.scrape?.total_new ?? 0} new</span>
+              {" "}scraped,{" "}
+              <span style={{ color: 'var(--text-1)' }}>{pipelineResult.score?.total_scored ?? 0} scored</span>
               {pipelineResult.scrape?.total_duplicate > 0 && (
-                <span className="text-zinc-600"> · {pipelineResult.scrape.total_duplicate} duplicates skipped</span>
+                <span style={{ color: '#334155' }}> · {pipelineResult.scrape.total_duplicate} duplicates skipped</span>
               )}
             </span>
           )}
-          <button onClick={() => setPipelineResult(null)} className="text-zinc-600 hover:text-zinc-400 ml-4">✕</button>
+          <button
+            onClick={() => setPipelineResult(null)}
+            className="font-mono text-xs ml-4 transition-colors"
+            style={{ color: '#334155' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#64748b'}
+            onMouseLeave={e => e.currentTarget.style.color = '#334155'}
+          >
+            ✕
+          </button>
         </div>
       )}
 
-      {/* Filter Tabs */}
-      <div className="flex gap-1 mb-6 bg-white/[0.03] p-1 rounded-lg w-fit">
-        {STATUS_FILTERS.map(({ label, value }) => (
-          <button
-            key={label}
-            onClick={() => handleFilterChange(value)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              filter === value ? "bg-white/[0.08] text-white" : "text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      {/* ── Filter Tabs ── */}
+      {/* Horizontal scroll wrapper so tabs never wrap on small screens */}
+      <div className="mb-6 overflow-x-auto">
+        <div
+          className="flex gap-1 p-1 rounded-lg w-fit"
+          style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
+        >
+          {STATUS_FILTERS.map(({ label, value }) => (
+            <button
+              key={label}
+              onClick={() => handleFilterChange(value)}
+              className="font-mono text-[10px] font-medium tracking-widest uppercase px-3.5 py-2 rounded-md transition-all whitespace-nowrap"
+              style={filter === value
+                ? { backgroundColor: 'rgba(255,255,255,0.08)', color: 'var(--text-1)' }
+                : { color: '#475569' }
+              }
+              onMouseEnter={e => { if (filter !== value) e.currentTarget.style.color = '#94a3b8'; }}
+              onMouseLeave={e => { if (filter !== value) e.currentTarget.style.color = '#475569'; }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Error State */}
+      {/* ── Error State ── */}
       {error && (
-        <div className="border border-red-500/20 bg-red-500/5 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm font-medium">Failed to load jobs</p>
-          <p className="text-red-500/70 text-xs mt-1">{error}</p>
-          <p className="text-zinc-600 text-xs mt-2">
-            Is the backend running?{" "}
-            <code className="text-zinc-500">uvicorn api.main:app --reload --port 8000</code>
+        <div
+          className="rounded-lg p-4 mb-6"
+          style={{ border: '1px solid rgba(248,113,113,0.2)', backgroundColor: 'rgba(248,113,113,0.05)' }}
+        >
+          <p className="font-semibold text-sm mb-1" style={{ color: '#f87171' }}>Connection failed</p>
+          <p className="font-mono text-xs mb-2" style={{ color: '#f87171', opacity: 0.7 }}>{error}</p>
+          <p className="font-mono text-[10px]" style={{ color: '#475569' }}>
+            Start backend:{" "}
+            <code style={{ color: '#64748b' }}>uvicorn api.main:app --reload --port 8000</code>
           </p>
         </div>
       )}
 
-      {/* Job List */}
+      {/* ── Job List ── */}
       <div className="space-y-2">
         {loading ? (
           Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
         ) : jobs.length === 0 ? (
-          <div className="border border-white/[0.06] rounded-lg p-16 text-center">
-            <div className="w-8 h-8 mx-auto mb-4 text-zinc-700">
+          <div
+            className="rounded-lg p-16 text-center"
+            style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-elevated)' }}
+          >
+            <div className="w-8 h-8 mx-auto mb-4" style={{ color: '#1e293b' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="7" width="20" height="14" rx="2" />
                 <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
               </svg>
             </div>
-            <p className="text-zinc-500 text-sm">No jobs found.</p>
-            <p className="text-zinc-700 text-xs mt-1">
+            <p className="text-sm font-medium mb-1" style={{ color: '#475569' }}>No jobs found</p>
+            <p className="font-mono text-[10px] tracking-wider" style={{ color: '#1e293b' }}>
               {filter
-                ? `No jobs with status "${filter}". Try a different filter.`
-                : "Run the Scraper Agent to populate this list."}
+                ? `NO JOBS WITH STATUS "${filter.toUpperCase()}" — TRY ANOTHER FILTER`
+                : "RUN THE SCRAPER AGENT TO POPULATE THIS LIST"}
             </p>
           </div>
         ) : (
@@ -518,23 +618,34 @@ export function JobsPage() {
         )}
       </div>
 
-      {/* Pagination */}
+      {/* ── Pagination ── */}
       {!loading && totalPages > 1 && (
-        <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/[0.06]">
+        <div
+          className="flex items-center justify-between mt-6 pt-4"
+          style={{ borderTop: '1px solid var(--border)' }}
+        >
           <button
             onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
             disabled={offset === 0}
-            className="text-sm text-zinc-500 hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="font-mono text-xs tracking-wider transition-colors disabled:opacity-25"
+            style={{ color: '#64748b' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
+            onMouseLeave={e => e.currentTarget.style.color = '#64748b'}
           >
-            ← Prev
+            ← PREV
           </button>
-          <span className="text-xs text-zinc-600">Page {currentPage} of {totalPages}</span>
+          <span className="font-mono text-[10px] tracking-widest" style={{ color: '#334155' }}>
+            PAGE {currentPage} / {totalPages}
+          </span>
           <button
             onClick={() => setOffset(offset + PAGE_SIZE)}
             disabled={offset + PAGE_SIZE >= total}
-            className="text-sm text-zinc-500 hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="font-mono text-xs tracking-wider transition-colors disabled:opacity-25"
+            style={{ color: '#64748b' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
+            onMouseLeave={e => e.currentTarget.style.color = '#64748b'}
           >
-            Next →
+            NEXT →
           </button>
         </div>
       )}
