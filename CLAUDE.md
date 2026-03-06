@@ -23,30 +23,34 @@ The **Orchestrator** (`orchestrator.py`) is the only true AI agent — it uses C
 
 ## Current Phase
 
-**Phase 4 — Orchestrator ✅ COMPLETE. Merged to main.**
+**Frontend Redesign ✅ COMPLETE. Pushed to dev.**
 
 ### Where we left off (end of session)
 
-Everything is complete and stable. 281 passing tests. Merged to main.
+Frontend fully redesigned with "Terminal Command Center" aesthetic. 281 passing tests. No backend changes.
 
-**What was built and polished this session:**
-- max_apply number input (1–10) added to OrchestratorPage.jsx ✅
-- Fresh scan PATH decision tree fixed (strict if/elif priority: B→A→C→D→stop) ✅
-- Soft-deleted jobs now filtered in `_get_db_state` and `_get_reviewed_jobs` ✅
-- Per-tool exception handling in `_run_loop` — errors return to Claude instead of crashing ✅
-- Fixed wrong `ScraperResult`/`MatchResult` attribute names in `_execute_tool` ✅
-- Apply Agent: browser close no longer rolls back DB commit (try/except on cleanup) ✅
-- Apply Agent: form filled + screenshot = SUBMITTED (no confirmation page required) ✅
-- Apply Agent: handoff exits immediately when browser closed (`asyncio.wait` race) ✅
-- Apply Agent: `asyncio.CancelledError` now caught correctly (`except BaseException`) ✅
-- Jobs dashboard: Applied + Failed filter tabs ✅
-- Jobs dashboard: expandable cards (full reasoning, metadata, source URL) ✅
-- Status polling interval: 2s → 5s ✅
-- README, DESIGN.md, CLAUDE.md all updated ✅
+**What was built this session:**
+- `FRONTEND_SKILL.md` downloaded and moved to `.claude/commands/frontend-design.md` — available as `/frontend-design` slash command in future sessions ✅
+- `frontend/index.html` — Google Fonts import (Syne + JetBrains Mono), updated title ✅
+- `frontend/tailwind.config.js` — custom font families, `ring-pulse` and `fade-in-up` keyframes ✅
+- `frontend/src/index.css` — CSS design tokens (CSS variables), radial dot-grid background, custom scrollbar ✅
+- `frontend/src/components/Sidebar.jsx` — "JH" violet monogram brand mark, uppercase mono nav labels, violet left-border rule on active items ✅
+- `frontend/src/pages/JobsPage.jsx` — monospace score badges with colored borders, uppercase action buttons, redesigned cards/tabs/header ✅
+- `frontend/src/pages/OrchestratorPage.jsx` — violet step-type tags (DB/NET/AI/OK), ring-pulse status dot, staggered fadeInUp on log rows ✅
+- `frontend/src/pages/SettingsPage.jsx` — redesigned sections, violet toggle/button, mono labels ✅
+- `frontend/src/pages/ApplicationsPage.jsx` — redesigned empty state ✅
+
+**Design system decisions:**
+- **Fonts:** Syne (geometric, bold) for all UI + JetBrains Mono for data elements (scores, timestamps, status tags)
+- **Accent:** Violet `#a78bfa` — chosen because it's completely clear of score semantic colors (green/yellow/orange/red)
+- **Background:** Radial dot-grid (`background-image: radial-gradient`) at 4% opacity — adds depth without distraction
+- **Sidebar active state:** Thin 2px violet `border-l` rule (terminal cursor) instead of filled background
+- **Buttons:** Bordered/uppercase/mono throughout — reads as "control panel" not generic SaaS
+- **Animations:** `ring-pulse` (expanding ring from status dot) + `fade-in-up` with staggered `animation-delay` on log rows
 
 ### Next session — Phase 5: Smarter Apply Agent
 
-The Orchestrator is done. The biggest remaining gap is the Apply Agent's form-filling intelligence. Current approach is hardcoded selectors for Greenhouse's standard fields. Plan:
+The frontend is done. The biggest remaining gap is the Apply Agent's form-filling intelligence. Current approach is hardcoded selectors for Greenhouse's standard fields. Plan:
 
 1. **DOM extraction → Claude → execute**
    - Read all form fields from the page (labels, input types, options, dropdowns)
