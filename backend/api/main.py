@@ -31,9 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 from core.database import engine
 
-from api.routes import jobs, orchestrator, pipeline, profile
-# TODO: Uncomment as route files are implemented:
-# from api.routes import applications
+from api.routes import applications, jobs, orchestrator, pipeline, profile
 
 # ── Structured Logging Setup ──────────────────────────────────────────────────
 # We configure logging once at app startup so all modules share the same format.
@@ -118,11 +116,10 @@ app.add_middleware(
 #   The `prefix` means every route in jobs.py is automatically under /api/v1/jobs.
 #
 app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["jobs"])
+app.include_router(applications.router, prefix="/api/v1/applications", tags=["applications"])
 app.include_router(profile.router, prefix="/api/v1/profile", tags=["profile"])
 app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["pipeline"])
 app.include_router(orchestrator.router, prefix="/api/v1/orchestrator", tags=["orchestrator"])
-# TODO: Uncomment as route files are implemented:
-# app.include_router(applications.router, prefix="/api/v1/applications", tags=["applications"])
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────
