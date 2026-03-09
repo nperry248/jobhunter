@@ -2,18 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Design Tokens ─────────────────────────────────────────────────────────────
+   CSS custom properties (variables) for our color palette.
+   Using variables here means we can reference them anywhere — including in
+   inline styles where Tailwind arbitrary values would be verbose.
+
+   Naming convention: --bg-* for backgrounds, --border for dividers,
+   --accent for the primary brand color (violet-400). */
+
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* Backgrounds — layered from darkest to slightly lighter */
+  --bg-base:     #07090c;   /* page background — very dark blue-tinted black    */
+  --bg-sidebar:  #090b0f;   /* sidebar — slightly warmer than the page           */
+  --bg-elevated: #0d1118;   /* cards, panels, surfaces above the base layer      */
+  --bg-input:    #0b0e13;   /* form inputs and text areas                        */
+
+  /* Brand accent — violet-400. Chosen because it's:
+     - Completely clear of score semantic colors (green/yellow/orange/red)
+     - Unexpected for a developer tool — most use blue or green
+     - High contrast against the near-black backgrounds */
+  --accent:        #a78bfa;
+  --accent-bg:     rgba(167, 139, 250, 0.08);
+  --accent-border: rgba(167, 139, 250, 0.3);
+
+  /* Borders — subtle white transparency layers */
+  --border:       rgba(255, 255, 255, 0.065);
+  --border-hover: rgba(255, 255, 255, 0.12);
+
+  /* Text hierarchy */
+  --text-1: #e2e8f0;   /* primary text — near white   */
+  --text-2: #64748b;   /* secondary — slate-500        */
+  --text-3: #1e293b;   /* muted — for placeholders     */
 }
+
+/* ── Base Styles ────────────────────────────────────────────────────────────── */
 
 body {
   margin: 0;
-  background-color: #0a0a0a;
-  color: #e5e5e5;
+  background-color: var(--bg-base);
+  color: var(--text-1);
+
+  /* Subtle radial dot grid — a single pixel dot every 28px.
+     This creates depth and texture without competing with content.
+     The dots are only 4% opacity so they're barely visible on dark screens
+     but add professionalism at high brightness. */
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.04) 1px,
+    transparent 1px
+  );
+  background-size: 28px 28px;
 }
 
 * {
@@ -25,4 +63,26 @@ button {
   border: none;
   cursor: pointer;
   font-family: inherit;
+}
+
+/* ── Custom Scrollbar ───────────────────────────────────────────────────────────
+   Webkit scrollbars (Chrome/Safari/Edge). Makes scrollbars match our dark theme
+   instead of using the default OS-style scrollbar which looks out of place. */
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
 }

@@ -44,10 +44,11 @@ function App() {
   const [orchMaxApply, setOrchMaxApply] = useState(5);
 
   return (
-    <div className="flex min-h-screen bg-[#0a0a0a]">
+    // bg-[var(--bg-base)] is set in body via index.css; this div just provides flex layout.
+    <div className="flex min-h-screen">
       <Sidebar activePage={activePage} onNavigate={setActivePage} />
-      <main className="flex-1 min-h-screen">
-        {activePage === "jobs" && <JobsPage />}
+      <main className="flex-1 min-h-screen overflow-auto">
+        {activePage === "jobs"         && <JobsPage />}
         {activePage === "applications" && <ApplicationsPage />}
         {activePage === "orchestrator" && (
           <OrchestratorPage
@@ -67,7 +68,9 @@ function App() {
         )}
         {activePage === "settings" && <SettingsPage />}
         {!["jobs", "applications", "orchestrator", "settings"].includes(activePage) && (
-          <div className="p-8 text-zinc-500 text-sm">Page not found.</div>
+          <div className="p-8 font-mono text-xs" style={{ color: 'var(--text-2)' }}>
+            Page not found.
+          </div>
         )}
       </main>
     </div>

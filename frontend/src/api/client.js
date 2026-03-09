@@ -90,6 +90,55 @@ export async function clearAllJobs() {
   }
 }
 
+// ── Applications API ──────────────────────────────────────────────────────────
+
+/**
+ * Fetch a paginated list of applications with embedded job details.
+ *
+ * @param {object} params
+ * @param {string|null} params.tracking_status - Filter by tracking status or null for all
+ * @param {number}      params.limit           - Max results per page (default 20)
+ * @param {number}      params.offset          - Pagination offset
+ *
+ * @returns {{ applications: Application[], total: number, limit: number, offset: number }}
+ */
+export async function getApplications({ tracking_status = null, limit = 20, offset = 0 } = {}) {
+  const params = new URLSearchParams({ limit, offset });
+  if (tracking_status) params.set("tracking_status", tracking_status);
+  return request(`/api/v1/applications?${params}`);
+}
+
+/**
+ * Update an application's tracking_status (where the user is in the hiring process).
+ *
+ * @param {string} applicationId    - UUID of the application to update
+ * @param {string} tracking_status  - One of: applied, phone_screen, technical_interview,
+ *                                    final_round, offer, rejected, ghosted, withdrawn
+ *
+ * @returns {Application} The updated application object
+ */
+export async function updateApplicationTracking(applicationId, tracking_status) {
+  return request(`/api/v1/applications/${applicationId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ tracking_status }),
+  });
+}
+
+/**
+ * Hard-delete an application record.
+ * @param {string} applicationId - UUID of the application to remove
+ * @returns {void}
+ */
+export async function deleteApplication(applicationId) {
+  const response = await fetch(`${BASE_URL}/api/v1/applications/${applicationId}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status} ${response.statusText}`);
+  }
+}
+
 // ── Pipeline API ──────────────────────────────────────────────────────────────
 
 /**

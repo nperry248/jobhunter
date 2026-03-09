@@ -36,6 +36,24 @@ class ApplicationStatus(str, PyEnum):
     MANUAL_REQUIRED = "manual_required"  # ATS couldn't be automated, needs human
 
 
+class TrackingStatus(str, PyEnum):
+    """
+    Where the user is in the hiring process AFTER applying.
+
+    This is separate from ApplicationStatus, which tracks the apply agent's work.
+    TrackingStatus tracks the human's job-search journey — updated manually via
+    the dropdown on the Applications page.
+
+    Kept intentionally simple: four stages cover the full arc without over-granularity.
+    "Interview" covers any stage (phone screen, technical, final round) — the user
+    doesn't need to distinguish between them for tracking purposes.
+    """
+    APPLIED = "applied"       # Submitted, waiting to hear back
+    INTERVIEW = "interview"   # Any interview stage (phone screen, technical, final)
+    OFFER = "offer"           # Received an offer
+    REJECTED = "rejected"     # Rejected at any stage
+
+
 class Application(Base):
     """
     One record per application attempt. Created by the Apply Agent.
@@ -67,6 +85,16 @@ class Application(Base):
         SAEnum(ApplicationStatus, name="application_status"),
         nullable=False,
         default=ApplicationStatus.PENDING,
+    )
+
+    # ── Tracking Status (user-managed) ───────────────────────────────────────
+    # Tracks where the user is in the hiring process AFTER submitting.
+    # The user updates this manually via the Applications page dropdown.
+    # Starts as APPLIED (the default after any successful submission).
+    tracking_status: Mapped[TrackingStatus] = mapped_column(
+        SAEnum(TrackingStatus, name="tracking_status"),
+        nullable=False,
+        default=TrackingStatus.APPLIED,
     )
 
     # ── Apply Attempt Details ────────────────────────────────────────────────
@@ -119,6 +147,7 @@ class Application(Base):
         """
         kwargs.setdefault("id", uuid.uuid4())
         kwargs.setdefault("status", ApplicationStatus.PENDING)
+        kwargs.setdefault("tracking_status", TrackingStatus.APPLIED)
         super().__init__(**kwargs)
 
     def __repr__(self) -> str:
