@@ -23,34 +23,29 @@ The **Orchestrator** (`orchestrator.py`) is the only true AI agent — it uses C
 
 ## Current Phase
 
-**Frontend Redesign ✅ COMPLETE. Pushed to dev.**
+**Applications Page ✅ COMPLETE. Merged to main. 294 passing tests.**
 
 ### Where we left off (end of session)
 
-Frontend fully redesigned with "Terminal Command Center" aesthetic. 281 passing tests. No backend changes.
+Full Applications page built and shipped. Backend API + frontend + 13 integration tests. All merged to main.
 
 **What was built this session:**
-- `FRONTEND_SKILL.md` downloaded and moved to `.claude/commands/frontend-design.md` — available as `/frontend-design` slash command in future sessions ✅
-- `frontend/index.html` — Google Fonts import (Syne + JetBrains Mono), updated title ✅
-- `frontend/tailwind.config.js` — custom font families, `ring-pulse` and `fade-in-up` keyframes ✅
-- `frontend/src/index.css` — CSS design tokens (CSS variables), radial dot-grid background, custom scrollbar ✅
-- `frontend/src/components/Sidebar.jsx` — "JH" violet monogram brand mark, uppercase mono nav labels, violet left-border rule on active items ✅
-- `frontend/src/pages/JobsPage.jsx` — monospace score badges with colored borders, uppercase action buttons, redesigned cards/tabs/header ✅
-- `frontend/src/pages/OrchestratorPage.jsx` — violet step-type tags (DB/NET/AI/OK), ring-pulse status dot, staggered fadeInUp on log rows ✅
-- `frontend/src/pages/SettingsPage.jsx` — redesigned sections, violet toggle/button, mono labels ✅
-- `frontend/src/pages/ApplicationsPage.jsx` — redesigned empty state ✅
+- `backend/models/application.py` — Added `TrackingStatus` enum (APPLIED, INTERVIEW, OFFER, REJECTED) + `tracking_status` column ✅
+- `backend/alembic/versions/7c911f13efd0` — Migration: add `tracking_status` column with `server_default='APPLIED'` ✅
+- `backend/alembic/versions/773bd996caac` — Migration: simplify 8 values → 4, remap phone_screen/technical_interview/final_round → INTERVIEW, ghosted/withdrawn → REJECTED ✅
+- `backend/alembic/versions/0ad017bc4f5a` — Migration: fix SQLAlchemy enum case bug (lowercase → UPPERCASE) ✅
+- `backend/api/routes/applications.py` — GET (paginated, filterable, selectinload), PATCH (MissingGreenlet fix via re-query after flush), DELETE (hard delete, 204) ✅
+- `backend/api/main.py` — Registered applications router at `/api/v1/applications` ✅
+- `backend/tests/integration/test_api_applications.py` — 13 integration tests ✅
+- `frontend/src/api/client.js` — `getApplications`, `updateApplicationTracking`, `deleteApplication` ✅
+- `frontend/src/pages/ApplicationsPage.jsx` — Filter tabs, ApplicationCard with TrackingBadge + status dropdown (optimistic update), inline delete confirm, pagination, empty states ✅
 
-**Design system decisions:**
-- **Fonts:** Syne (geometric, bold) for all UI + JetBrains Mono for data elements (scores, timestamps, status tags)
-- **Accent:** Violet `#a78bfa` — chosen because it's completely clear of score semantic colors (green/yellow/orange/red)
-- **Background:** Radial dot-grid (`background-image: radial-gradient`) at 4% opacity — adds depth without distraction
-- **Sidebar active state:** Thin 2px violet `border-l` rule (terminal cursor) instead of filled background
-- **Buttons:** Bordered/uppercase/mono throughout — reads as "control panel" not generic SaaS
-- **Animations:** `ring-pulse` (expanding ring from status dot) + `fade-in-up` with staggered `animation-delay` on log rows
+**Key bug discovered and fixed this session:**
+SQLAlchemy `SAEnum` stores Python enum NAMES (`.name` = uppercase `"APPLIED"`) in PostgreSQL, not string values (`.value` = lowercase `"applied"`). Previous migrations used lowercase → runtime `LookupError`. Fixed via migration `0ad017bc4f5a` which UPPERCASEs all existing rows and recreates the PostgreSQL enum type with uppercase values.
 
 ### Next session — Phase 5: Smarter Apply Agent
 
-The frontend is done. The biggest remaining gap is the Apply Agent's form-filling intelligence. Current approach is hardcoded selectors for Greenhouse's standard fields. Plan:
+The biggest remaining gap is the Apply Agent's form-filling intelligence. Current approach is hardcoded selectors for Greenhouse's standard fields. Plan:
 
 1. **DOM extraction → Claude → execute**
    - Read all form fields from the page (labels, input types, options, dropdowns)
