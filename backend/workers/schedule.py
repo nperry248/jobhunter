@@ -40,6 +40,8 @@ CONFIGURATION:
     - Every 5 minutes:   timedelta(minutes=5)  (good for dev/testing)
 """
 
+from datetime import timedelta
+
 from celery.schedules import crontab
 
 from workers.celery_app import celery_app
@@ -58,7 +60,7 @@ celery_app.conf.beat_schedule = {
     # kwargs passes resume_path=None so the agent reads from UserProfile in DB.
     "scrape-and-score-hourly": {
         "task": "scrape_and_score_task",
-        "schedule": crontab(minute=0),  # fires at :00 every hour
+        "schedule": timedelta(minutes=1),  # fires at :00 every hour or 1 min for dev testing
         "kwargs": {"resume_path": None},
         "options": {
             # CONCEPT — task routing:

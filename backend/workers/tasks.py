@@ -167,21 +167,25 @@ def scrape_and_score_task(resume_path: str | None = None) -> dict:
         extra={"agent_name": "workers.tasks", "resume_path": resume_path},
     )
 
-    # ── Step 1: Scrape ─────────────────────────────────────────────────────────
-    scrape_result = _to_dict(asyncio.run(scraper_run()))
-    logger.info(
-        "Scrape step complete",
-        extra={"agent_name": "workers.tasks", **scrape_result},
-    )
+    # NOTE: Both agents must run inside a SINGLE asyncio.run() call.
+    # Calling asyncio.run() twice in sequence creates two separate event loops.
+    # SQLAlchemy's async connection pool binds to the first loop; when that loop
+    # closes after scraper_run() finishes, the pool's connections become invalid.
+    # resume_match_run() then tries to use those stale connections on a new loop
+    # and raises "Future attached to a different loop".
+    # Running both inside one async wrapper keeps them on the same event loop
+    # for the entire duration of the task.
+    async def _run_pipeline():
+        scrape_result = _to_dict(await scraper_run())
+        logger.info(
+            "Scrape step complete",
+            extra={"agent_name": "workers.tasks", **scrape_result},
+        )
+        score_result = _to_dict(await resume_match_run(resume_path=resume_path))
+        logger.info(
+            "Score step complete",
+            extra={"agent_name": "workers.tasks", **score_result},
+        )
+        return {"scrape": scrape_result, "score": score_result}
 
-    # ── Step 2: Score ──────────────────────────────────────────────────────────
-    score_result = _to_dict(asyncio.run(resume_match_run(resume_path=resume_path)))
-    logger.info(
-        "Score step complete",
-        extra={"agent_name": "workers.tasks", **score_result},
-    )
-
-    return {
-        "scrape": scrape_result,
-        "score": score_result,
-    }
+    return asyncio.run(_run_pipeline())
