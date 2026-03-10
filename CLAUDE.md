@@ -23,25 +23,23 @@ The **Orchestrator** (`orchestrator.py`) is the only true AI agent — it uses C
 
 ## Current Phase
 
-**Applications Page ✅ COMPLETE. Merged to main. 294 passing tests.**
+**Celery/Redis investigation + fixes ✅ COMPLETE. 294 passing tests. On dev.**
 
 ### Where we left off (end of session)
 
-Full Applications page built and shipped. Backend API + frontend + 13 integration tests. All merged to main.
+Investigated and fixed the Celery + Redis task queue setup. Everything now works end-to-end: manual `.delay()` trigger, Beat automatic scheduling, and worker execution.
 
-**What was built this session:**
-- `backend/models/application.py` — Added `TrackingStatus` enum (APPLIED, INTERVIEW, OFFER, REJECTED) + `tracking_status` column ✅
-- `backend/alembic/versions/7c911f13efd0` — Migration: add `tracking_status` column with `server_default='APPLIED'` ✅
-- `backend/alembic/versions/773bd996caac` — Migration: simplify 8 values → 4, remap phone_screen/technical_interview/final_round → INTERVIEW, ghosted/withdrawn → REJECTED ✅
-- `backend/alembic/versions/0ad017bc4f5a` — Migration: fix SQLAlchemy enum case bug (lowercase → UPPERCASE) ✅
-- `backend/api/routes/applications.py` — GET (paginated, filterable, selectinload), PATCH (MissingGreenlet fix via re-query after flush), DELETE (hard delete, 204) ✅
-- `backend/api/main.py` — Registered applications router at `/api/v1/applications` ✅
-- `backend/tests/integration/test_api_applications.py` — 13 integration tests ✅
-- `frontend/src/api/client.js` — `getApplications`, `updateApplicationTracking`, `deleteApplication` ✅
-- `frontend/src/pages/ApplicationsPage.jsx` — Filter tabs, ApplicationCard with TrackingBadge + status dropdown (optimistic update), inline delete confirm, pagination, empty states ✅
+**What was fixed this session:**
+- `backend/workers/tasks.py` — Refactored `scrape_and_score_task` to run both agents inside a single `asyncio.run()` call. Previously called `asyncio.run()` twice — first call closed the event loop, SQLAlchemy's async connection pool became invalid, second call raised `"Future attached to a different loop"` ✅
+- `backend/workers/schedule.py` — Fixed `timedelta` import (was incorrectly imported from `celery.schedules`, should be from Python's `datetime` stdlib). This was silently breaking Beat scheduling ✅
+- `backend/workers/celery_app.py` — Added `workers.schedule` to the `include` list so Beat always loads the schedule on startup ✅
+- `backend/tests/unit/test_workers.py` — Updated `TestScrapeAndScoreTask` tests to mock agent `run()` functions directly with `AsyncMock` instead of mocking `asyncio.run` twice ✅
 
-**Key bug discovered and fixed this session:**
-SQLAlchemy `SAEnum` stores Python enum NAMES (`.name` = uppercase `"APPLIED"`) in PostgreSQL, not string values (`.value` = lowercase `"applied"`). Previous migrations used lowercase → runtime `LookupError`. Fixed via migration `0ad017bc4f5a` which UPPERCASEs all existing rows and recreates the PostgreSQL enum type with uppercase values.
+**Key operational notes learned:**
+- Always start worker and beat with `PYTHONPATH=$(pwd)` from `backend/` — forked subprocesses don't inherit the shell's module path
+- Delete `celerybeat-schedule` file when changing schedule format (stale file blocks Beat from firing)
+- Beat schedule is currently set to `timedelta(minutes=1)` for dev testing — change to `crontab(minute=0)` for production
+- To manually trigger a task: `python -c "from workers.tasks import scrape_and_score_task; scrape_and_score_task.delay()"`
 
 ### Next session — Phase 5: Smarter Apply Agent
 

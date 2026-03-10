@@ -50,7 +50,7 @@ celery_app = Celery(
     # Tell Celery where to find task definitions.
     # When the worker starts, it imports these modules and discovers all @task
     # decorators. Without this, tasks won't be found.
-    include=["workers.tasks"],
+    include=["workers.tasks", "workers.schedule"],
 )
 
 # ── Serialization settings ────────────────────────────────────────────────────

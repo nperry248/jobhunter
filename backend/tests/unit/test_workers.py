@@ -24,7 +24,7 @@ CONCEPT — Mocking asyncio.run():
 """
 
 import dataclasses
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -166,26 +166,27 @@ class TestScoreTask:
 class TestScrapeAndScoreTask:
     def test_runs_scraper_then_scorer(self):
         """
-        scrape_and_score_task should call asyncio.run() twice:
-        first for the scraper, then for the resume match agent.
-        The combined result should contain both 'scrape' and 'score' keys.
+        scrape_and_score_task should call the scraper agent then the resume match
+        agent in order. The combined result should contain both 'scrape' and 'score' keys.
+
+        NOTE: The task now runs both agents inside a single asyncio.run() call using
+        an internal async wrapper (_run_pipeline). We mock the agent run() functions
+        directly (as AsyncMocks) rather than mocking asyncio.run(), since asyncio.run
+        is only called once now.
         """
-        fake_scrape = FakeScraperResult()
-        fake_score = FakeMatchResult()
         call_order = []
 
-        def fake_asyncio_run(coro):
-            # Track call order by checking coro type would require more setup,
-            # so we use a simple counter — first call = scrape, second = score
-            if len(call_order) == 0:
-                call_order.append("scrape")
-                return fake_scrape
-            else:
-                call_order.append("score")
-                return fake_score
+        async def fake_scraper_run(*args, **kwargs):
+            call_order.append("scrape")
+            return FakeScraperResult()
 
-        with patch("workers.tasks.asyncio.run", side_effect=fake_asyncio_run):
-            result = scrape_and_score_task.apply().get()
+        async def fake_score_run(*args, **kwargs):
+            call_order.append("score")
+            return FakeMatchResult()
+
+        with patch("agents.scraper.run", side_effect=fake_scraper_run):
+            with patch("agents.resume_match.run", side_effect=fake_score_run):
+                result = scrape_and_score_task.apply().get()
 
         assert call_order == ["scrape", "score"], "Scraper must run before scorer"
         assert "scrape" in result
@@ -193,11 +194,9 @@ class TestScrapeAndScoreTask:
 
     def test_combined_result_structure(self):
         """Result dict should have nested 'scrape' and 'score' sub-dicts."""
-        with patch("workers.tasks.asyncio.run", side_effect=[
-            FakeScraperResult(),
-            FakeMatchResult(),
-        ]):
-            result = scrape_and_score_task.apply().get()
+        with patch("agents.scraper.run", new=AsyncMock(return_value=FakeScraperResult())):
+            with patch("agents.resume_match.run", new=AsyncMock(return_value=FakeMatchResult())):
+                result = scrape_and_score_task.apply().get()
 
         assert result["scrape"]["total_new"] == 8
         assert result["score"]["total_scored"] == 7
@@ -207,17 +206,15 @@ class TestScrapeAndScoreTask:
         If the scraper fails, scrape_and_score_task should propagate the error.
         The scorer should NOT run — no point scoring if we didn't scrape new jobs.
         """
-        with patch("workers.tasks.asyncio.run", side_effect=RuntimeError("scraper broke")):
+        with patch("agents.scraper.run", new=AsyncMock(side_effect=RuntimeError("scraper broke"))):
             task_result = scrape_and_score_task.apply()
             assert task_result.failed()
 
     def test_result_is_json_serializable(self):
         """Combined result must be JSON-serializable for Celery's Redis backend."""
         import json
-        with patch("workers.tasks.asyncio.run", side_effect=[
-            FakeScraperResult(),
-            FakeMatchResult(),
-        ]):
-            result = scrape_and_score_task.apply().get()
+        with patch("agents.scraper.run", new=AsyncMock(return_value=FakeScraperResult())):
+            with patch("agents.resume_match.run", new=AsyncMock(return_value=FakeMatchResult())):
+                result = scrape_and_score_task.apply().get()
 
         json.dumps(result)  # must not raise
